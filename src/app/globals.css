@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: oklch(0.965 0.011 82);
+  --paper: oklch(0.989 0.006 83);
+  --ink: oklch(0.205 0.018 65);
+  --muted: oklch(0.505 0.025 66);
+  --faint: oklch(0.67 0.02 71);
+  --line: oklch(0.205 0.018 65 / 0.11);
+  --gold: oklch(0.69 0.132 75);
+  --gold-dark: oklch(0.5 0.112 68);
+  --gold-soft: oklch(0.925 0.056 82);
+  --wine: oklch(0.41 0.095 28);
+  --success: oklch(0.49 0.09 152);
+  --error: oklch(0.49 0.16 28);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-gold-soft: var(--gold-soft);
+  --color-wine: var(--wine);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --font-sans: "Avenir Next", Avenir, "Helvetica Neue", sans-serif;
+  --font-display: "Iowan Old Style", Baskerville, "Times New Roman", serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 82% 4%, oklch(0.89 0.04 78 / 0.45), transparent 26rem),
+    linear-gradient(90deg, transparent 49.9%, oklch(0.2 0.02 65 / 0.018) 50%, transparent 50.1%),
+    var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+}
+
+button,
+a,
+input,
+select {
+  touch-action: manipulation;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--gold-dark);
+  outline-offset: 3px;
+}
+
+input,
+select {
+  font-size: 16px;
+}
+
+::selection {
+  background: var(--gold-soft);
+  color: var(--ink);
+}
+
+.paper-shadow {
+  box-shadow:
+    0 1px 1px oklch(0.2 0.02 65 / 0.04),
+    0 7px 24px oklch(0.2 0.02 65 / 0.055),
+    0 26px 60px oklch(0.2 0.02 65 / 0.035);
+}
+
+.ruled-paper {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 55px,
+    oklch(0.2 0.02 65 / 0.045) 56px
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    animation: reveal 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .reveal-late {
+    animation-delay: 100ms;
+  }
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .training-tab:hover {
+    color: var(--ink);
+  }
+
+  .exercise-progress-row:not([aria-pressed="true"]):hover {
+    background: var(--canvas);
+  }
+
+  .lift:hover {
+    transform: translateY(-2px);
+    border-color: oklch(0.5 0.112 68 / 0.35);
+  }
+}
+
+@media (max-width: 620px) {
+  body {
+    background: var(--canvas);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
