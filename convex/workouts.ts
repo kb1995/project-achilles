@@ -10,6 +10,9 @@ const starterExercises = [
   { category: "Chest", name: "Dumbbell press", tracking: "strength" as const },
   { category: "Chest", name: "Incline press", tracking: "strength" as const },
   { category: "Legs", name: "Bulgarian split squat", tracking: "strength" as const },
+  { category: "Legs", name: "Squats", tracking: "strength" as const },
+  { category: "Legs", name: "Leg press", tracking: "strength" as const },
+  { category: "Legs", name: "Dumbbell walking lunge", tracking: "strength" as const },
   { category: "Legs", name: "Romanian deadlift", tracking: "strength" as const },
 ];
 
@@ -39,13 +42,15 @@ export const ensureStarterPlan = mutation({
 export const getOverview = query({
   args: { startDate: v.string(), endDate: v.string() },
   handler: async (ctx, { startDate, endDate }) => {
-    const [exercises, workouts] = await Promise.all([
+    const [exercises, workouts, activities] = await Promise.all([
       ctx.db.query("exercises").collect(),
       ctx.db.query("workoutSessions").withIndex("by_date", (q) => q.gte("date", startDate).lte("date", endDate)).order("desc").collect(),
+      ctx.db.query("activitySessions").withIndex("by_date", (q) => q.gte("date", startDate).lte("date", endDate)).order("desc").collect(),
     ]);
     return {
       exercises: exercises.sort((a, b) => a.category.localeCompare(b.category) || a.createdAt - b.createdAt),
       workouts,
+      activities,
     };
   },
 });
@@ -90,6 +95,38 @@ export const saveWorkout = mutation({
 
 export const removeWorkout = mutation({
   args: { id: v.id("workoutSessions") },
+  handler: async (ctx, { id }) => {
+    await ctx.db.delete(id);
+  },
+});
+
+export const saveActivity = mutation({
+  args: {
+    date: v.string(),
+    activity: v.string(),
+    durationMinutes: v.number(),
+    distanceKm: v.optional(v.number()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, activity) => {
+    const name = activity.activity.trim();
+    if (!name) throw new Error("Choose an activity.");
+    if (!Number.isFinite(activity.durationMinutes) || activity.durationMinutes < 1 || activity.durationMinutes > 1_440) {
+      throw new Error("Duration must be between 1 and 1,440 minutes.");
+    }
+    if (activity.distanceKm !== undefined && (!Number.isFinite(activity.distanceKm) || activity.distanceKm <= 0 || activity.distanceKm > 1_000)) {
+      throw new Error("Distance must be between 0 and 1,000 km.");
+    }
+    return await ctx.db.insert("activitySessions", {
+      ...activity,
+      activity: name,
+      note: activity.note?.trim() || undefined,
+    });
+  },
+});
+
+export const removeActivity = mutation({
+  args: { id: v.id("activitySessions") },
   handler: async (ctx, { id }) => {
     await ctx.db.delete(id);
   },

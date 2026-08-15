@@ -1,5 +1,5 @@
-import { AchillesDashboard } from "@/components/achilles-dashboard";
+import { redirect } from "next/navigation";
 
 export default function CalendarPage() {
-  return <AchillesDashboard activeView="calendar" />;
+  redirect("/overview");
 }

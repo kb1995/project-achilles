@@ -13,6 +13,9 @@ export default defineSchema({
     protein: v.number(),
     source: v.union(v.literal("quick"), v.literal("manual")),
   }).index("by_date", ["date"]),
+  creatineEntries: defineTable({
+    date: v.string(),
+  }).index("by_date", ["date"]),
   weightMeasurements: defineTable({
     date: v.string(),
     weightKg: v.number(),
@@ -50,5 +53,12 @@ export default defineSchema({
         ),
       }),
     ),
+  }).index("by_date", ["date"]),
+  activitySessions: defineTable({
+    date: v.string(),
+    activity: v.string(),
+    durationMinutes: v.number(),
+    distanceKm: v.optional(v.number()),
+    note: v.optional(v.string()),
   }).index("by_date", ["date"]),
 });

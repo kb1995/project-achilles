@@ -1,27 +1,40 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import Image from "next/image";
 import {
+  Activity,
   ArrowUpRight,
   BarChart3,
+  Bike,
   CalendarDays,
   Check,
   ChevronDown,
+  CircleDot,
+  ClipboardList,
   Dumbbell,
+  Footprints,
   Layers3,
+  Mountain,
   Plus,
+  Route,
+  Sparkles,
   Target,
+  Timer,
   Trash2,
   TrendingUp,
+  Waves,
   X,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 
 type DraftSet = { key: number; reps: string; weightKg: string };
 type DraftExercise = { key: number; exerciseId: Id<"exercises">; sets: DraftSet[] };
-type TrainingMode = "log" | "progress";
+type TrainingMode = "log" | "planner" | "progress";
+type LogKind = "strength" | "activity";
 type ExercisePerformance = {
   date: string;
   estimatedOneRepMax: number;
@@ -29,9 +42,54 @@ type ExercisePerformance = {
   sets: { reps: number; weightKg: number }[];
   totalVolume: number;
 };
+type PlannedSet = { reps: number; weightKg: number };
+type PlannedExercise = {
+  exercise: Doc<"exercises">;
+  sets: PlannedSet[];
+  signal: "baseline" | "build" | "increase";
+  guidance: string;
+  lastDate?: string;
+  sessionCount: number;
+};
 
 let draftKey = 0;
 const nextKey = () => ++draftKey;
+
+const exerciseImages: Record<string, string> = {
+  "Biceps curls": "/exercises/biceps-curls.webp",
+  "Overhead tricep dumbbell": "/exercises/overhead-tricep-dumbbell.webp",
+  "Cable tricep pushdown": "/exercises/cable-tricep-pushdown.webp",
+  "Dumbbell row": "/exercises/dumbbell-row.webp",
+  "Lat pulldown": "/exercises/lat-pulldown.webp",
+  "Dumbbell press": "/exercises/dumbbell-press.webp",
+  "Incline press": "/exercises/incline-press.webp",
+  "Bulgarian split squat": "/exercises/bulgarian-split-squat.webp",
+  "Squats": "/exercises/squats.webp",
+  "Leg press": "/exercises/leg-press.webp",
+  "Dumbbell walking lunge": "/exercises/dumbbell-walking-lunge.webp",
+  "Romanian deadlift": "/exercises/romanian-deadlift.webp",
+};
+
+const categoryFallbackImages: Record<string, string> = {
+  Arms: exerciseImages["Biceps curls"],
+  Back: exerciseImages["Dumbbell row"],
+  Chest: exerciseImages["Dumbbell press"],
+  Legs: exerciseImages["Bulgarian split squat"],
+};
+
+const activities = [
+  { name: "Running", detail: "Road, track or treadmill", icon: Footprints },
+  { name: "Squash", detail: "Match or practice", icon: CircleDot },
+  { name: "Cycling", detail: "Indoor or outdoor ride", icon: Bike },
+  { name: "Hiking", detail: "Trail or incline walk", icon: Mountain },
+  { name: "Swimming", detail: "Pool or open water", icon: Waves },
+  { name: "Other", detail: "Any movement that counts", icon: Activity },
+] as const;
+
+function exerciseImage(exercise: Pick<Doc<"exercises">, "name" | "category">) {
+  const namedImage = Object.entries(exerciseImages).find(([name]) => name.toLowerCase() === exercise.name.toLowerCase())?.[1];
+  return namedImage ?? categoryFallbackImages[exercise.category] ?? exerciseImages["Dumbbell row"];
+}
 
 function addDays(key: string, amount: number) {
   const [year, month, day] = key.split("-").map(Number);
@@ -95,23 +153,79 @@ function overloadRecommendation(history: ExercisePerformance[]) {
   };
 }
 
+function planExercise(exercise: Doc<"exercises">, workouts: Doc<"workoutSessions">[]): PlannedExercise {
+  const history = exerciseHistory(exercise._id, workouts);
+  const latest = history.at(-1);
+  if (!latest) {
+    return {
+      exercise,
+      sets: Array.from({ length: 3 }, () => ({ reps: 8, weightKg: 10 })),
+      signal: "baseline",
+      guidance: "Start with a controlled baseline. Adjust the load in the logger if 10 kg is not appropriate.",
+      sessionCount: 0,
+    };
+  }
+
+  const readyToIncrease = latest.sets.length >= 2 && latest.sets.every((set) => set.reps >= 10 && set.weightKg > 0);
+  if (readyToIncrease) {
+    return {
+      exercise,
+      sets: latest.sets.map((set) => ({ reps: 8, weightKg: set.weightKg + 2.5 })),
+      signal: "increase",
+      guidance: "Every set reached 10 reps. Add 2.5 kg and rebuild from 8 with clean form.",
+      lastDate: latest.date,
+      sessionCount: history.length,
+    };
+  }
+
+  return {
+    exercise,
+    sets: latest.sets.map((set) => ({ reps: Math.min(10, set.reps + 1), weightKg: set.weightKg })),
+    signal: "build",
+    guidance: "Keep the last load and aim for one more rep on each set, capped at 10.",
+    lastDate: latest.date,
+    sessionCount: history.length,
+  };
+}
+
+function workoutPlan(category: string, exercises: Doc<"exercises">[], workouts: Doc<"workoutSessions">[]) {
+  const matching = exercises.filter((exercise) => exercise.category === category);
+  const recentIds = workouts
+    .filter((workout) => workout.category === category)
+    .flatMap((workout) => workout.exercises.map((item) => String(item.exerciseId)));
+  const recentOrder = new Map<string, number>();
+  for (const id of recentIds) if (!recentOrder.has(id)) recentOrder.set(id, recentOrder.size);
+
+  return matching
+    .map((exercise) => planExercise(exercise, workouts))
+    .sort((a, b) => {
+      const aRecent = recentOrder.get(String(a.exercise._id));
+      const bRecent = recentOrder.get(String(b.exercise._id));
+      if (aRecent !== undefined || bRecent !== undefined) return (aRecent ?? Number.MAX_SAFE_INTEGER) - (bRecent ?? Number.MAX_SAFE_INTEGER);
+      return b.sessionCount - a.sessionCount || a.exercise.createdAt - b.exercise.createdAt;
+    });
+}
+
 function formatWeight(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-export function TrainingView({ today }: { today: string }) {
+export function TrainingView({ today, initialDate }: { today: string; initialDate?: string }) {
   const overview = useQuery(api.workouts.getOverview, { startDate: addDays(today, -364), endDate: today });
   const ensureStarterPlan = useMutation(api.workouts.ensureStarterPlan);
   const saveWorkout = useMutation(api.workouts.saveWorkout);
   const removeWorkout = useMutation(api.workouts.removeWorkout);
+  const saveActivity = useMutation(api.workouts.saveActivity);
+  const removeActivity = useMutation(api.workouts.removeActivity);
   const addExercise = useMutation(api.workouts.addExercise);
   const exercises = useMemo(() => overview?.exercises ?? [], [overview?.exercises]);
   const workouts = overview?.workouts ?? [];
+  const activityHistory = overview?.activities ?? [];
   const categories = useMemo(() => Array.from(new Set(exercises.map((exercise) => exercise.category))), [exercises]);
 
   const [category, setCategory] = useState("Back");
   const [title, setTitle] = useState("Back workout");
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(() => initialDate && initialDate <= today ? initialDate : today);
   const [note, setNote] = useState("");
   const [draft, setDraft] = useState<DraftExercise[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -120,6 +234,12 @@ export function TrainingView({ today }: { today: string }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<TrainingMode>("log");
+  const [logKind, setLogKind] = useState<LogKind>("strength");
+  const [activityName, setActivityName] = useState("Running");
+  const [customActivityName, setCustomActivityName] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("45");
+  const [distanceKm, setDistanceKm] = useState("");
+  const [activityNote, setActivityNote] = useState("");
   const starterPlanEnsured = useRef(false);
   const activeCategory = categories.includes(category) ? category : categories[0] ?? category;
 
@@ -133,6 +253,7 @@ export function TrainingView({ today }: { today: string }) {
   const recentWorkouts = workouts.filter((workout) => workout.date >= addDays(today, -89));
   const lastWorkout = workouts[0];
   const totalSets = recentWorkouts.reduce((sum, workout) => sum + workout.exercises.reduce((count, exercise) => count + exercise.sets.length, 0), 0);
+  const recentActivities = activityHistory.filter((activity) => activity.date >= addDays(today, -89));
 
   function changeCategory(next: string) {
     setCategory(next);
@@ -141,11 +262,32 @@ export function TrainingView({ today }: { today: string }) {
   }
 
   function handleModeKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const modes: TrainingMode[] = ["log", "planner", "progress"];
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const nextMode: TrainingMode = mode === "log" ? "progress" : "log";
+    const currentIndex = modes.indexOf(mode);
+    const nextMode = event.key === "Home"
+      ? modes[0]
+      : event.key === "End"
+        ? modes.at(-1)!
+        : modes[(currentIndex + (event.key === "ArrowRight" ? 1 : -1) + modes.length) % modes.length];
     setMode(nextMode);
     requestAnimationFrame(() => document.getElementById(`training-${nextMode}-tab`)?.focus());
+  }
+
+  function loadWorkoutPlan(categoryName: string, plan: PlannedExercise[]) {
+    setCategory(categoryName);
+    setTitle(`${categoryName} workout`);
+    setLogKind("strength");
+    setDraft(plan.map((item) => ({
+      key: nextKey(),
+      exerciseId: item.exercise._id,
+      sets: item.sets.map((set) => ({ key: nextKey(), reps: String(set.reps), weightKg: String(set.weightKg) })),
+    })));
+    setError("");
+    setSaved(false);
+    setMode("log");
+    requestAnimationFrame(() => document.getElementById("training-log-tab")?.focus());
   }
 
   function addToWorkout(exercise: Doc<"exercises">) {
@@ -201,29 +343,53 @@ export function TrainingView({ today }: { today: string }) {
     } finally { setSubmitting(false); }
   }
 
+  async function handleActivitySave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const resolvedName = activityName === "Other" ? customActivityName.trim() : activityName;
+    const duration = Number(durationMinutes);
+    const distance = distanceKm.trim() ? Number(distanceKm) : undefined;
+    if (!resolvedName) { setError("Name your activity."); return; }
+    if (!Number.isInteger(duration) || duration < 1) { setError("Add a duration of at least 1 minute."); return; }
+    if (distance !== undefined && (!Number.isFinite(distance) || distance <= 0)) { setError("Distance must be greater than 0 km."); return; }
+    setSubmitting(true); setError(""); setSaved(false);
+    try {
+      await saveActivity({ date, activity: resolvedName, durationMinutes: duration, ...(distance !== undefined ? { distanceKm: distance } : {}), ...(activityNote.trim() ? { note: activityNote.trim() } : {}) });
+      setDurationMinutes("45"); setDistanceKm(""); setActivityNote(""); setSaved(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save this activity.");
+    } finally { setSubmitting(false); }
+  }
+
   return (
     <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 sm:py-10 xl:px-12">
       <header className="reveal flex flex-col justify-between gap-6 border-b border-line pb-7 md:flex-row md:items-end">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">Progressive overload</p>
-          <h1 className="mt-2 font-display text-[2.75rem] leading-none tracking-[-0.04em] sm:text-[3.5rem]">{mode === "log" ? "Build the session." : "Read the evidence."}</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">{mode === "log" ? "One workout, many exercises. Record the honest reps and weight of every set—then return next time with a number to beat." : "Follow every movement across the year. See what improved, what stalled, and the exact load to chase next."}</p>
+          <p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">Training log</p>
+          <h1 className="mt-2 font-display text-[2.75rem] leading-none tracking-[-0.04em] sm:text-[3.5rem]">{mode === "log" ? "Build the session." : mode === "planner" ? "Plan the next move." : "Read the evidence."}</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">{mode === "log" ? "Track a progressive strength session or record the sport and movement that keeps your engine sharp." : mode === "planner" ? "Choose a workout type and turn your previous working sets into a focused plan for today." : "Follow every movement across the year. See what improved, what stalled, and the exact load to chase next."}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-muted"><Layers3 size={17} className="text-gold-dark" /> Exercise-by-exercise · Set-by-set</div>
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted"><Layers3 size={17} className="text-gold-dark" /> {mode === "planner" ? "Built from your training history" : mode === "log" && logKind === "activity" ? "Minutes matter · Miles count" : "Exercise-by-exercise · Set-by-set"}</div>
       </header>
 
       <div className="reveal reveal-late flex border-b border-line" role="tablist" aria-label="Training views">
         <button type="button" role="tab" aria-selected={mode === "log"} aria-controls="training-log-panel" id="training-log-tab" tabIndex={mode === "log" ? 0 : -1} onKeyDown={handleModeKeyDown} onClick={() => setMode("log")} className={`training-tab relative min-h-14 px-4 text-xs font-bold transition-colors duration-150 sm:px-6 ${mode === "log" ? "text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-gold-dark" : "text-muted"}`}>Log workout</button>
+        <button type="button" role="tab" aria-selected={mode === "planner"} aria-controls="training-planner-panel" id="training-planner-tab" tabIndex={mode === "planner" ? 0 : -1} onKeyDown={handleModeKeyDown} onClick={() => setMode("planner")} className={`training-tab relative min-h-14 px-4 text-xs font-bold transition-colors duration-150 sm:px-6 ${mode === "planner" ? "text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-gold-dark" : "text-muted"}`}>Workout planner</button>
         <button type="button" role="tab" aria-selected={mode === "progress"} aria-controls="training-progress-panel" id="training-progress-tab" tabIndex={mode === "progress" ? 0 : -1} onKeyDown={handleModeKeyDown} onClick={() => setMode("progress")} className={`training-tab relative min-h-14 px-4 text-xs font-bold transition-colors duration-150 sm:px-6 ${mode === "progress" ? "text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-gold-dark" : "text-muted"}`}>Exercise progress</button>
       </div>
 
       {mode === "log" ? <div role="tabpanel" id="training-log-panel" aria-labelledby="training-log-tab">
       <section aria-label="Training summary" className="reveal reveal-late grid border-b border-line sm:grid-cols-3">
-        <TrainingMetric label="Workouts · 90 days" value={String(recentWorkouts.length)} meta="Complete sessions recorded" />
+        <TrainingMetric label="Sessions · 90 days" value={String(recentWorkouts.length + recentActivities.length)} meta="Strength and activity combined" />
         <TrainingMetric label="Working sets" value={String(totalSets)} meta="Every set counts" bordered />
         <TrainingMetric label="Last workload" value={lastWorkout ? `${Math.round(workoutVolume(lastWorkout)).toLocaleString()} kg` : "—"} meta={lastWorkout ? lastWorkout.title : "Record the first session"} bordered />
       </section>
 
+      <fieldset className="mt-7 grid gap-3 sm:grid-cols-2"><legend className="sr-only">Session format</legend>
+        <SessionKindButton active={logKind === "strength"} icon={Dumbbell} eyebrow="Progressive overload" title="Strength workout" detail="Exercises, sets, reps and load" onClick={() => { setLogKind("strength"); setError(""); setSaved(false); }} />
+        <SessionKindButton active={logKind === "activity"} icon={Footprints} eyebrow="Sport & conditioning" title="Activity" detail="Running, squash and more" onClick={() => { setLogKind("activity"); setError(""); setSaved(false); }} />
+      </fieldset>
+
+      {logKind === "strength" ? <>
       <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_340px]">
         <form onSubmit={handleSave} className="border border-line bg-paper paper-shadow">
           <div className="border-b border-line px-5 py-5 sm:px-7">
@@ -252,7 +418,8 @@ export function TrainingView({ today }: { today: string }) {
                   const previous = findPreviousSets(workouts, exercise._id);
                   return (
                     <section key={item.key} className="border border-line bg-canvas">
-                      <div className="flex items-center gap-3 border-b border-line bg-paper px-4 py-3 sm:px-5">
+                      <div className="flex items-center gap-3 border-b border-line bg-paper px-3 py-3 sm:px-5">
+                        <Image src={exerciseImage(exercise)} width={56} height={56} alt="" className="size-14 shrink-0 object-cover" />
                         <span className="grid size-8 place-items-center bg-ink text-xs font-bold text-paper">{String(exerciseIndex + 1).padStart(2, "0")}</span>
                         <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-bold">{exercise.name}</h3><p className="mt-0.5 text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">{exercise.category} · {item.sets.length} {item.sets.length === 1 ? "set" : "sets"}</p></div>
                         <button type="button" onClick={() => setDraft((current) => current.filter((row) => row.key !== item.key))} aria-label={`Remove ${exercise.name} from workout`} className="grid size-11 place-items-center text-faint hover:text-error"><X size={16} /></button>
@@ -296,11 +463,115 @@ export function TrainingView({ today }: { today: string }) {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">The overload rule</p><h2 className="mt-1 font-display text-3xl">Beat one honest number.</h2></div><TrendingUp className="text-gold-dark" size={22} /></div>
         <div className="mt-6 grid gap-px bg-line md:grid-cols-3"><OverloadRule number="01" title="Match the weight" body="Use the previous session shown beside each set." /><OverloadRule number="02" title="Add a rep" body="When form stays clean, beat one set by one rep." /><OverloadRule number="03" title="Then add weight" body="Once every set reaches the rep target, raise the load." /></div>
       </section>
-      </div> : <ExerciseProgressView exercises={exercises} workouts={workouts} loading={overview === undefined} />}
+      </> : <ActivityLogger
+        today={today}
+        date={date}
+        onDateChange={setDate}
+        activityName={activityName}
+        onActivityChange={(name) => { setActivityName(name); setError(""); setSaved(false); }}
+        customActivityName={customActivityName}
+        onCustomActivityChange={setCustomActivityName}
+        durationMinutes={durationMinutes}
+        onDurationChange={setDurationMinutes}
+        distanceKm={distanceKm}
+        onDistanceChange={setDistanceKm}
+        note={activityNote}
+        onNoteChange={setActivityNote}
+        onSubmit={handleActivitySave}
+        submitting={submitting}
+        saved={saved}
+        error={error}
+        history={activityHistory}
+        loading={overview === undefined}
+        onRemove={(id) => removeActivity({ id })}
+      />}
+      </div> : mode === "planner" ? <WorkoutPlanner categories={categories} exercises={exercises} workouts={workouts} loading={overview === undefined} onUsePlan={loadWorkoutPlan} /> : <ExerciseProgressView exercises={exercises} workouts={workouts} loading={overview === undefined} />}
 
       {exerciseDialogOpen && <AddExerciseDialog categories={categories} initialCategory={activeCategory} onClose={() => setExerciseDialogOpen(false)} onAdd={async (values) => { const id = await addExercise(values); setCategory(values.category); setDraft((current) => [...current, { key: nextKey(), exerciseId: id, sets: [{ key: nextKey(), reps: "8", weightKg: "10" }] }]); setExerciseDialogOpen(false); }} />}
     </div>
   );
+}
+
+function WorkoutPlanner({ categories, exercises, workouts, loading, onUsePlan }: {
+  categories: string[];
+  exercises: Doc<"exercises">[];
+  workouts: Doc<"workoutSessions">[];
+  loading: boolean;
+  onUsePlan: (category: string, plan: PlannedExercise[]) => void;
+}) {
+  const [category, setCategory] = useState("Back");
+  const [selectionsByCategory, setSelectionsByCategory] = useState<Record<string, string[]>>({});
+  const activeCategory = categories.includes(category) ? category : categories[0] ?? category;
+  const plan = useMemo(() => workoutPlan(activeCategory, exercises, workouts), [activeCategory, exercises, workouts]);
+  const defaultIds = plan.slice(0, 4).map((item) => String(item.exercise._id));
+  const selectedIds = selectionsByCategory[activeCategory] ?? defaultIds;
+  const selectedPlan = plan.filter((item) => selectedIds.includes(String(item.exercise._id)));
+  const totalSets = selectedPlan.reduce((sum, item) => sum + item.sets.length, 0);
+  const historyBased = selectedPlan.filter((item) => item.sessionCount > 0).length;
+  const progressing = selectedPlan.filter((item) => item.signal === "increase").length;
+
+  function toggleExercise(id: Id<"exercises">) {
+    const key = String(id);
+    setSelectionsByCategory((current) => {
+      const selected = current[activeCategory] ?? defaultIds;
+      return { ...current, [activeCategory]: selected.includes(key) ? selected.filter((item) => item !== key) : [...selected, key] };
+    });
+  }
+
+  if (loading) return <div role="tabpanel" id="training-planner-panel" aria-labelledby="training-planner-tab" className="grid gap-5 py-7"><div className="h-36 animate-pulse bg-paper" /><div className="h-96 animate-pulse bg-paper" /></div>;
+
+  return <div role="tabpanel" id="training-planner-panel" aria-labelledby="training-planner-tab" className="py-7">
+    <section className="border border-line bg-paper paper-shadow">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="p-5 sm:p-7">
+          <p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">Choose the work</p>
+          <h2 className="mt-1 font-display text-3xl sm:text-4xl">What are we training?</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Pick a workout type. Achilles will prioritize movements from your recent sessions, then set today’s reps and load from the last honest numbers you logged.</p>
+          <fieldset className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4"><legend className="sr-only">Workout type</legend>{categories.map((item) => {
+            const active = item === activeCategory;
+            const count = exercises.filter((exercise) => exercise.category === item).length;
+            return <button key={item} type="button" aria-pressed={active} onClick={() => setCategory(item)} className={`lift min-h-20 border px-3 py-3 text-left transition-[transform,border-color,background-color] ${active ? "border-ink bg-ink text-paper" : "border-line bg-canvas"}`}><span className={`block text-[9px] font-bold tracking-[0.13em] uppercase ${active ? "text-gold" : "text-gold-dark"}`}>{String(count).padStart(2, "0")} movements</span><span className="mt-2 block font-display text-xl">{item}</span></button>;
+          })}</fieldset>
+        </div>
+        <aside className="bg-ink p-5 text-paper sm:p-7">
+          <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gold uppercase">Coach’s draft</p><h3 className="mt-1 font-display text-3xl">{activeCategory} session</h3></div><span className="grid size-11 shrink-0 place-items-center bg-gold text-ink"><Sparkles size={19} /></span></div>
+          <div className="mt-7 grid grid-cols-3 gap-px bg-paper/10"><PlannerMetric value={String(selectedPlan.length)} label="Exercises" /><PlannerMetric value={String(totalSets)} label="Sets" /><PlannerMetric value={String(progressing)} label="Load jumps" /></div>
+          <p className="mt-5 text-xs leading-5 text-paper/55">{historyBased === selectedPlan.length && selectedPlan.length > 0 ? "Every prescription is grounded in your previous logs." : `${historyBased} of ${selectedPlan.length} prescriptions use previous logs; new movements start with a baseline.`}</p>
+        </aside>
+      </div>
+    </section>
+
+    {plan.length === 0 ? <div className="mt-5 grid min-h-72 place-content-center border border-dashed border-line bg-paper px-6 text-center"><ClipboardList size={26} className="mx-auto text-gold-dark" /><h3 className="mt-3 font-display text-3xl">No exercises to plan yet.</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">Create an exercise for {activeCategory.toLowerCase()} in the workout logger, then return here for a prescription.</p></div> : <>
+      <section className="mt-5 border border-line bg-paper paper-shadow">
+        <div className="flex flex-col justify-between gap-3 border-b border-line p-5 sm:flex-row sm:items-end sm:px-7"><div><p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">Suggested session</p><h3 className="mt-1 font-display text-3xl">The work, in order.</h3></div><p className="max-w-sm text-xs leading-5 text-muted">The first four movements are selected. Tap any card to add or remove it before loading the plan.</p></div>
+        <div className="grid gap-px bg-line lg:grid-cols-2">{plan.map((item, index) => {
+          const selected = selectedIds.includes(String(item.exercise._id));
+          return <button key={item.exercise._id} type="button" aria-pressed={selected} onClick={() => toggleExercise(item.exercise._id)} className={`flex min-h-[172px] gap-4 p-4 text-left transition-colors sm:p-5 ${selected ? "bg-paper" : "bg-canvas opacity-55"}`}>
+            <Image src={exerciseImage(item.exercise)} width={112} height={132} alt="" className="h-[132px] w-28 shrink-0 object-cover" />
+            <span className="flex min-w-0 flex-1 flex-col"><span className="flex items-start justify-between gap-3"><span><span className="block text-[9px] font-bold tracking-[0.13em] text-gold-dark uppercase">{String(index + 1).padStart(2, "0")} · {item.signal === "increase" ? "Increase load" : item.signal === "build" ? "Build reps" : "Set baseline"}</span><span className="mt-1 block text-base font-bold leading-5">{item.exercise.name}</span></span><span aria-hidden="true" className={`grid size-7 shrink-0 place-items-center border text-xs font-bold ${selected ? "border-ink bg-ink text-paper" : "border-line text-faint"}`}>{selected ? <Check size={14} /> : "+"}</span></span>
+            <span className="mt-3 block font-display text-xl tabular-nums">{planPrescription(item.sets)}</span>
+            <span className="mt-1.5 block text-[10px] leading-4 text-muted">{item.guidance}</span>
+            <span className="mt-auto pt-2 text-[9px] font-semibold tracking-[0.1em] text-faint uppercase">{item.lastDate ? `Last logged ${formatDate(item.lastDate)} · ${item.sessionCount} ${item.sessionCount === 1 ? "session" : "sessions"}` : "No previous logs"}</span></span>
+          </button>;
+        })}</div>
+      </section>
+      <div className="sticky bottom-[72px] z-10 mt-5 border border-line bg-paper/95 p-3 shadow-[0_-10px_35px_oklch(0.2_0.02_65/0.08)] backdrop-blur sm:static sm:flex sm:items-center sm:justify-between sm:gap-5 sm:p-5 sm:shadow-none">
+        <p className="hidden text-xs leading-5 text-muted sm:block">You can still edit every rep and load after the plan opens in the logger.</p>
+        <button type="button" disabled={selectedPlan.length === 0} onClick={() => onUsePlan(activeCategory, selectedPlan)} className="flex min-h-12 w-full items-center justify-center gap-2 bg-gold px-6 text-sm font-bold text-ink active:scale-[0.98] disabled:bg-faint sm:w-auto"><ClipboardList size={17} /> Load {selectedPlan.length || "no"} {selectedPlan.length === 1 ? "exercise" : "exercises"} into logger</button>
+      </div>
+    </>}
+  </div>;
+}
+
+function planPrescription(sets: PlannedSet[]) {
+  if (sets.length === 0) return "No working sets";
+  const uniform = sets.every((set) => set.reps === sets[0]?.reps && set.weightKg === sets[0]?.weightKg);
+  if (uniform) return `${sets.length} × ${sets[0].reps} @ ${formatWeight(sets[0].weightKg)} kg`;
+  return sets.map((set) => `${set.reps}×${formatWeight(set.weightKg)}`).join(" · ");
+}
+
+function PlannerMetric({ value, label }: { value: string; label: string }) {
+  return <div className="bg-ink px-2 py-4 text-center"><span className="block font-display text-2xl tabular-nums text-gold">{value}</span><span className="mt-1 block text-[8px] font-bold tracking-[0.12em] text-paper/45 uppercase">{label}</span></div>;
 }
 
 function findPreviousSets(workouts: Doc<"workoutSessions">[], exerciseId: Id<"exercises">) {
@@ -354,7 +625,7 @@ function ExerciseProgressView({ exercises, workouts, loading }: { exercises: Doc
               {progress.map((item) => {
                 const active = item.exercise._id === selected?.exercise._id;
                 const latest = item.history.at(-1);
-                return <button type="button" key={item.exercise._id} aria-pressed={active} onClick={() => setSelectedExerciseId(item.exercise._id)} className={`exercise-progress-row flex min-h-[72px] w-full items-center gap-3 px-4 text-left transition-colors duration-150 active:scale-[0.99] ${active ? "bg-ink text-paper" : ""}`}><span className={`grid size-9 shrink-0 place-items-center text-[10px] font-bold ${active ? "bg-gold text-ink" : "bg-canvas text-gold-dark"}`}>{item.exercise.name.split(/\s+/).map((word) => word[0]).join("").slice(0, 2).toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{item.exercise.name}</span><span className={`mt-1 block text-[10px] font-semibold tracking-[0.1em] uppercase ${active ? "text-paper/50" : "text-faint"}`}>{latest ? `${formatWeight(latest.maxWeightKg)} kg · ${item.history.length} ${item.history.length === 1 ? "session" : "sessions"}` : "No sessions yet"}</span></span>{item.recommendation.tone === "increase" && <ArrowUpRight size={15} className="shrink-0 text-gold" aria-label="Ready to increase" />}</button>;
+                return <button type="button" key={item.exercise._id} aria-pressed={active} onClick={() => setSelectedExerciseId(item.exercise._id)} className={`exercise-progress-row flex min-h-[76px] w-full items-center gap-3 px-3 text-left transition-colors duration-150 active:scale-[0.99] ${active ? "bg-ink text-paper" : ""}`}><Image src={exerciseImage(item.exercise)} width={52} height={52} alt="" className={`size-[52px] shrink-0 object-cover ${active ? "ring-1 ring-gold" : ""}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{item.exercise.name}</span><span className={`mt-1 block text-[10px] font-semibold tracking-[0.1em] uppercase ${active ? "text-paper/50" : "text-faint"}`}>{latest ? `${formatWeight(latest.maxWeightKg)} kg · ${item.history.length} ${item.history.length === 1 ? "session" : "sessions"}` : "No sessions yet"}</span></span>{item.recommendation.tone === "increase" && <ArrowUpRight size={15} className="shrink-0 text-gold" aria-label="Ready to increase" />}</button>;
               })}
             </div>
           </aside>
@@ -374,7 +645,7 @@ function ExerciseProgressDetail({ exercise, history, recommendation }: { exercis
   return (
     <main className="min-w-0">
       <header className="flex flex-col justify-between gap-4 border-b border-line pb-5 sm:flex-row sm:items-end">
-        <div><p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">{exercise.category} · Progress file</p><h2 className="mt-1 font-display text-4xl tracking-[-0.03em] sm:text-5xl">{exercise.name}</h2></div>
+        <div className="flex items-center gap-4"><Image src={exerciseImage(exercise)} width={84} height={84} alt="" className="size-[84px] shrink-0 object-cover" /><div><p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">{exercise.category} · Progress file</p><h2 className="mt-1 font-display text-4xl tracking-[-0.03em] sm:text-5xl">{exercise.name}</h2></div></div>
         <p className="text-xs font-semibold text-muted">{latest ? `Last trained ${formatDate(latest.date)}` : "Waiting for a first session"}</p>
       </header>
 
@@ -433,6 +704,57 @@ function ExerciseTrendChart({ history, exerciseName }: { history: ExercisePerfor
   return <div className="mt-6"><div className="h-52 w-full overflow-hidden bg-canvas p-3 sm:h-64 sm:p-5"><svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label={`${exerciseName} maximum working weight over the last ${sessions.length} sessions`} preserveAspectRatio="none">{[0.25, 0.5, 0.75].map((position) => <line key={position} x1={inset} x2={width - inset} y1={height * position} y2={height * position} stroke="currentColor" className="text-line" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}{points.length > 1 && <polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="currentColor" className="text-gold-dark" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}{points.map((point, index) => <circle key={`${point.session.date}-${index}`} cx={point.x} cy={point.y} r="6" fill="currentColor" className={index === points.length - 1 ? "text-gold" : "text-ink"} stroke="var(--canvas)" strokeWidth="3" vectorEffect="non-scaling-stroke" />)}</svg></div><div className="mt-3 flex items-start justify-between gap-4 text-[10px] font-semibold tracking-[0.08em] text-muted uppercase"><span>{formatDate(sessions[0].date)} · {formatWeight(sessions[0].maxWeightKg)} kg</span><span className="text-right">{formatDate(sessions.at(-1)!.date)} · {formatWeight(sessions.at(-1)!.maxWeightKg)} kg</span></div></div>;
 }
 
+function SessionKindButton({ active, icon: Icon, eyebrow, title, detail, onClick }: { active: boolean; icon: LucideIcon; eyebrow: string; title: string; detail: string; onClick: () => void }) {
+  return <button type="button" aria-pressed={active} onClick={onClick} className={`lift flex min-h-24 items-center gap-4 border p-4 text-left transition-[transform,border-color,background-color] duration-200 sm:p-5 ${active ? "border-ink bg-ink text-paper" : "border-line bg-paper"}`}><span className={`grid size-12 shrink-0 place-items-center ${active ? "bg-gold text-ink" : "bg-gold-soft text-gold-dark"}`}><Icon size={20} /></span><span className="min-w-0"><span className={`block text-[9px] font-bold tracking-[0.14em] uppercase ${active ? "text-gold" : "text-gold-dark"}`}>{eyebrow}</span><span className="mt-1 block font-display text-2xl leading-none">{title}</span><span className={`mt-1.5 block text-xs ${active ? "text-paper/55" : "text-muted"}`}>{detail}</span></span></button>;
+}
+
+function ActivityLogger({ today, date, onDateChange, activityName, onActivityChange, customActivityName, onCustomActivityChange, durationMinutes, onDurationChange, distanceKm, onDistanceChange, note, onNoteChange, onSubmit, submitting, saved, error, history, loading, onRemove }: {
+  today: string;
+  date: string;
+  onDateChange: (value: string) => void;
+  activityName: string;
+  onActivityChange: (value: string) => void;
+  customActivityName: string;
+  onCustomActivityChange: (value: string) => void;
+  durationMinutes: string;
+  onDurationChange: (value: string) => void;
+  distanceKm: string;
+  onDistanceChange: (value: string) => void;
+  note: string;
+  onNoteChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  submitting: boolean;
+  saved: boolean;
+  error: string;
+  history: Doc<"activitySessions">[];
+  loading: boolean;
+  onRemove: (id: Id<"activitySessions">) => void;
+}) {
+  return <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_340px]">
+    <form onSubmit={onSubmit} className="border border-line bg-paper paper-shadow">
+      <div className="flex flex-col justify-between gap-4 border-b border-line px-5 py-5 sm:flex-row sm:items-start sm:px-7">
+        <div><p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">Movement without a barbell</p><h2 className="mt-1 font-display text-3xl">What did you do?</h2><p className="mt-2 text-sm text-muted">Pick an activity, then capture the effort in under a minute.</p></div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-muted"><CalendarDays size={15} /><span className="sr-only">Activity date</span><input type="date" max={today} value={date} onChange={(event) => onDateChange(event.target.value)} className="h-11 border border-line bg-canvas px-3 text-ink" /></label>
+      </div>
+      <div className="p-4 sm:p-7">
+        <fieldset><legend className="text-xs font-bold">Choose an activity</legend><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{activities.map((item) => { const Icon = item.icon; const selected = item.name === activityName; return <button key={item.name} type="button" aria-pressed={selected} onClick={() => onActivityChange(item.name)} className={`lift min-h-32 border p-4 text-left transition-[transform,border-color,background-color] ${selected ? "border-ink bg-ink text-paper" : "border-line bg-canvas"}`}><Icon size={22} className={selected ? "text-gold" : "text-gold-dark"} /><span className="mt-4 block text-sm font-bold">{item.name}</span><span className={`mt-1 block text-[10px] leading-4 ${selected ? "text-paper/50" : "text-muted"}`}>{item.detail}</span></button>; })}</div></fieldset>
+        {activityName === "Other" && <label className="mt-4 block text-xs font-semibold">Activity name<input autoFocus required value={customActivityName} onChange={(event) => onCustomActivityChange(event.target.value)} placeholder="Padel, yoga, basketball…" className="mt-1.5 h-12 w-full border border-line bg-canvas px-3 placeholder:text-faint" /></label>}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold">Duration <span className="font-normal text-faint">minutes</span><span className="relative mt-1.5 block"><Timer size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gold-dark" /><input required inputMode="numeric" type="number" min="1" max="1440" step="1" value={durationMinutes} onChange={(event) => onDurationChange(event.target.value)} className="h-12 w-full border border-line bg-canvas pl-10 pr-3" /></span></label>
+          <label className="text-xs font-semibold">Distance <span className="font-normal text-faint">km · optional</span><span className="relative mt-1.5 block"><Route size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gold-dark" /><input inputMode="decimal" type="number" min="0.01" max="1000" step="0.01" value={distanceKm} onChange={(event) => onDistanceChange(event.target.value)} placeholder="5.00" className="h-12 w-full border border-line bg-canvas pl-10 pr-3 placeholder:text-faint" /></span></label>
+        </div>
+        <label className="mt-4 block text-xs font-semibold">Activity note <span className="font-normal text-faint">optional</span><input value={note} onChange={(event) => onNoteChange(event.target.value)} placeholder="Route, opponent, pace, how it felt…" className="mt-1.5 h-12 w-full border border-line bg-canvas px-3 placeholder:text-faint" /></label>
+        {error && <p role="alert" className="mt-3 text-sm text-error">{error}</p>}
+        <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center"><button disabled={submitting} className="flex min-h-12 flex-1 items-center justify-center gap-2 bg-gold px-5 text-sm font-bold text-ink active:scale-[0.98] disabled:bg-faint"><Check size={16} />{submitting ? "Saving activity…" : `Save ${activityName === "Other" ? "activity" : activityName.toLowerCase()}`}</button>{saved && <p role="status" className="flex items-center justify-center gap-2 text-sm font-semibold text-success"><Check size={15} /> Activity saved</p>}</div>
+      </div>
+    </form>
+    <aside className="self-start border border-line bg-ink text-paper paper-shadow">
+      <div className="border-b border-paper/10 p-5 sm:p-6"><p className="text-[10px] font-bold tracking-[0.16em] text-gold uppercase">Recent activities</p><h2 className="mt-1 font-display text-3xl">Keep the engine.</h2></div>
+      {loading ? <div className="m-5 h-40 animate-pulse bg-paper/5" /> : history.length === 0 ? <div className="grid min-h-72 place-content-center p-6 text-center"><Footprints size={24} className="mx-auto text-gold" /><p className="mt-3 font-display text-2xl">No activities yet.</p><p className="mt-2 text-sm leading-6 text-paper/50">Runs, matches and rides will collect here.</p></div> : <ul className="divide-y divide-paper/10">{history.slice(0, 8).map((item) => <li key={item._id} className="flex items-start gap-3 p-5 sm:p-6"><span className="grid size-10 shrink-0 place-items-center bg-paper/10 text-gold"><Activity size={17} /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-bold tracking-[0.13em] text-gold uppercase">{formatDate(item.date)}</p><h3 className="mt-1 truncate font-display text-xl">{item.activity}</h3><p className="mt-2 text-xs text-paper/50">{item.durationMinutes} min{item.distanceKm ? ` · ${formatWeight(item.distanceKm)} km` : ""}</p>{item.note && <p className="mt-2 line-clamp-2 text-xs leading-5 text-paper/65">{item.note}</p>}</div><button type="button" onClick={() => onRemove(item._id)} aria-label={`Remove ${item.activity}`} className="grid size-11 shrink-0 place-items-center text-paper/35 hover:text-paper"><Trash2 size={14} /></button></li>)}</ul>}
+    </aside>
+  </div>;
+}
+
 function ProgressMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return <div className="bg-paper p-5 sm:p-6"><p className="text-[9px] font-bold tracking-[0.14em] text-muted uppercase">{label}</p><p className="mt-2 font-display text-2xl tabular-nums">{value}</p><p className="mt-1 text-[10px] text-faint">{detail}</p></div>;
 }
@@ -442,8 +764,8 @@ function TrainingMetric({ label, value, meta, bordered = false }: { label: strin
 }
 
 function ExercisePicker({ exercises, selected, category, onChoose, onCreate }: { exercises: Doc<"exercises">[]; selected: Id<"exercises">[]; category: string; onChoose: (exercise: Doc<"exercises">) => void; onCreate: () => void }) {
-  const ordered = [...exercises].sort((a, b) => Number(b.category === category) - Number(a.category === category));
-  return <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-80 overflow-y-auto border border-line bg-paper p-2 paper-shadow"><p className="px-3 py-2 text-[9px] font-bold tracking-[0.14em] text-faint uppercase">Choose from your library</p>{ordered.map((exercise) => { const added = selected.includes(exercise._id); return <button type="button" key={exercise._id} disabled={added} onClick={() => onChoose(exercise)} className="flex min-h-12 w-full items-center gap-3 px-3 text-left hover:bg-canvas disabled:opacity-35"><Dumbbell size={14} className="text-gold-dark" /><span className="min-w-0 flex-1 truncate text-sm font-semibold">{exercise.name}</span><span className="text-[10px] font-bold tracking-[0.1em] text-faint uppercase">{added ? "Added" : exercise.category}</span></button>; })}<button type="button" onClick={onCreate} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 border-t border-line text-xs font-bold text-gold-dark"><Plus size={14} /> Create new exercise</button></div>;
+  const matching = exercises.filter((exercise) => exercise.category === category);
+  return <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-[430px] overflow-y-auto border border-line bg-paper p-3 paper-shadow"><div className="flex items-end justify-between gap-4 px-1 pb-3"><div><p className="text-[9px] font-bold tracking-[0.14em] text-gold-dark uppercase">{category} exercises only</p><p className="mt-1 font-display text-xl">Choose a movement.</p></div><span className="text-[10px] font-semibold text-faint">{matching.length} available</span></div>{matching.length ? <div className="grid gap-2 sm:grid-cols-2">{matching.map((exercise) => { const added = selected.includes(exercise._id); return <button type="button" key={exercise._id} disabled={added} onClick={() => onChoose(exercise)} className="lift flex min-h-[88px] items-center gap-3 border border-line bg-canvas p-2 text-left transition-[transform,border-color] disabled:opacity-40"><Image src={exerciseImage(exercise)} width={72} height={72} alt="" className="size-[72px] shrink-0 object-cover" /><span className="min-w-0 flex-1"><span className="block text-sm font-bold leading-5">{exercise.name}</span><span className="mt-1.5 block text-[9px] font-bold tracking-[0.12em] text-gold-dark uppercase">{added ? "Already added" : "Add exercise"}</span></span><Plus size={15} className="mr-1 shrink-0 text-gold-dark" /></button>; })}</div> : <p className="border border-dashed border-line bg-canvas px-4 py-8 text-center text-sm text-muted">No {category.toLowerCase()} exercises yet.</p>}<button type="button" onClick={onCreate} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 border-t border-line text-xs font-bold text-gold-dark"><Plus size={14} /> Create a {category.toLowerCase()} exercise</button></div>;
 }
 
 function OverloadRule({ number, title, body }: { number: string; title: string; body: string }) {

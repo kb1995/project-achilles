@@ -11,8 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Dumbbell,
-  LayoutDashboard,
   Minus,
+  Pill,
   Plus,
   Ruler,
   Scale,
@@ -25,8 +25,8 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { AchillesMark } from "./achilles-mark";
 import { TrainingView } from "./training-view";
 
-type AppView = "dashboard" | "training" | "calendar" | "measurements";
-type CalendarView = "week" | "month" | "year";
+type AppView = "overview" | "protein" | "training" | "measurements";
+type CalendarView = "day" | "week" | "month" | "year";
 
 const challengeStartDate = "2026-08-10";
 const proteinSuccessRatio = 0.9;
@@ -34,7 +34,7 @@ const poundsPerKilogram = 2.2046226218;
 const proteinGramsPerPound = 0.7;
 
 const foods = [
-  { name: "Granola bowl", detail: "3 tbsp 4.5% yogurt · 50 g nutty granola", protein: 5, symbol: "GB" },
+  { name: "Granola bowl", detail: "3 tbsp 4.5% yogurt · 50 g nutty granola", protein: 10, symbol: "GB" },
   { name: "Banica", detail: "1 serving", protein: 15, symbol: "BN" },
   { name: "Chicken with Rice", detail: "180 g cooked chicken fillet · ¼ cup cooked white rice", protein: 57, symbol: "CR" },
   { name: "Snickers bar", detail: "37.5 g bar", protein: 3.2, symbol: "SN" },
@@ -100,9 +100,9 @@ function journeyDay(startKey: string, today: string) {
 
 function AppNavigation({ active }: { active: AppView }) {
   const navItems = [
-    { id: "dashboard" as const, label: "Overview", href: "/overview", icon: LayoutDashboard },
+    { id: "overview" as const, label: "Overview", href: "/overview", icon: CalendarDays },
+    { id: "protein" as const, label: "Protein", href: "/protein", icon: Target },
     { id: "training" as const, label: "Training", href: "/training", icon: Dumbbell },
-    { id: "calendar" as const, label: "Calendar", href: "/calendar", icon: CalendarDays },
     { id: "measurements" as const, label: "Measurements", href: "/measurements", icon: Ruler },
   ];
 
@@ -137,7 +137,7 @@ function AppNavigation({ active }: { active: AppView }) {
         <div className="mt-10">
           <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.18em] text-faint uppercase">Your program</p>
           <div className="grid gap-1 text-sm">
-            <div className="flex min-h-11 items-center gap-3 px-3 text-ink"><Target size={16} className="text-gold-dark" /> Nutrition</div>
+            <Link href="/protein" className="flex min-h-11 items-center gap-3 px-3 text-ink"><Target size={16} className="text-gold-dark" /> Protein log</Link>
             <Link href="/training" className="flex min-h-11 w-full items-center gap-3 px-3 text-left text-ink"><Dumbbell size={16} className="text-gold-dark" /> Training</Link>
             <div className="flex min-h-11 items-center gap-3 px-3 text-faint"><Camera size={16} /> Progress photos</div>
           </div>
@@ -185,12 +185,14 @@ export function AchillesDashboard({ activeView, initialDate }: { activeView: App
   const [protein, setProtein] = useState("");
   const [pendingFood, setPendingFood] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savingCreatine, setSavingCreatine] = useState(false);
   const [error, setError] = useState("");
 
   const day = useQuery(api.protein.getDay, { date: selectedDate });
   const recent = useQuery(api.protein.getProgress, { startDate: addDays(today, -29), endDate: today });
   const addEntry = useMutation(api.protein.addEntry);
   const removeEntry = useMutation(api.protein.removeEntry);
+  const setCreatineTaken = useMutation(api.protein.setCreatineTaken);
 
   const weightKg = day?.resolvedWeightKg ?? 80;
   const weightSource = day?.weightSource ?? "baseline";
@@ -248,8 +250,21 @@ export function AchillesDashboard({ activeView, initialDate }: { activeView: App
     }
   }
 
+  async function toggleCreatine() {
+    if (!day) return;
+    setSavingCreatine(true);
+    setError("");
+    try {
+      await setCreatineTaken({ date: selectedDate, taken: !day.creatineTaken });
+    } catch {
+      setError("Creatine status could not be saved. Please try again.");
+    } finally {
+      setSavingCreatine(false);
+    }
+  }
+
   function openCalendarDay(date: string) {
-    router.push(`/overview?date=${encodeURIComponent(date > today ? today : date)}`);
+    router.push(`/protein?date=${encodeURIComponent(date > today ? today : date)}`);
   }
 
   return (
@@ -258,8 +273,8 @@ export function AchillesDashboard({ activeView, initialDate }: { activeView: App
       <AppNavigation active={activeView} />
 
       <main id="main-content" className="pb-24 lg:ml-[236px] lg:pb-0">
-        {activeView === "dashboard" ? (
-          <DashboardView
+        {activeView === "protein" ? (
+          <ProteinLogView
             today={today}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
@@ -272,6 +287,9 @@ export function AchillesDashboard({ activeView, initialDate }: { activeView: App
             dayNumber={dayNumber}
             consistency={consistency}
             entries={day?.entries}
+            creatineTaken={day?.creatineTaken}
+            savingCreatine={savingCreatine}
+            toggleCreatine={toggleCreatine}
             manualOpen={manualOpen}
             setManualOpen={setManualOpen}
             foodName={foodName}
@@ -287,22 +305,22 @@ export function AchillesDashboard({ activeView, initialDate }: { activeView: App
             removeEntry={removeEntry}
             setError={setError}
             recent={recent}
-            onOpenCalendar={() => router.push("/calendar")}
+            onOpenCalendar={() => router.push("/overview")}
             onOpenMeasurements={() => router.push("/measurements")}
           />
         ) : activeView === "training" ? (
-          <TrainingView today={today} />
-        ) : activeView === "calendar" ? (
+          <TrainingView today={today} initialDate={selectedDate} />
+        ) : activeView === "overview" ? (
           <ProgressCalendar today={today} goal={goal} startDate={startDate} onOpenDay={openCalendarDay} />
         ) : (
-          <MeasurementsView today={today} baselineWeight={weightKg} />
+          <MeasurementsView today={today} baselineWeight={weightKg} initialDate={selectedDate} />
         )}
       </main>
     </div>
   );
 }
 
-type DashboardProps = {
+type ProteinLogProps = {
   today: string;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
@@ -315,6 +333,9 @@ type DashboardProps = {
   dayNumber: number;
   consistency: number;
   entries: Doc<"proteinEntries">[] | undefined;
+  creatineTaken: boolean | undefined;
+  savingCreatine: boolean;
+  toggleCreatine: () => Promise<void>;
   manualOpen: boolean;
   setManualOpen: (open: boolean) => void;
   foodName: string;
@@ -334,7 +355,7 @@ type DashboardProps = {
   onOpenMeasurements: () => void;
 };
 
-function DashboardView(props: DashboardProps) {
+function ProteinLogView(props: ProteinLogProps) {
   const entries = props.entries;
   const recentMap = new Map(props.recent?.map((item) => [item.date, item.protein]));
   const recentDays = Array.from({ length: 7 }, (_, index) => addDays(props.today, index - 6));
@@ -343,9 +364,9 @@ function DashboardView(props: DashboardProps) {
     <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 sm:py-10 xl:px-12">
       <header className="reveal flex flex-col justify-between gap-5 border-b border-line pb-7 sm:flex-row sm:items-end">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">Day {props.dayNumber} · The ascent</p>
-          <h1 className="mt-2 font-display text-[2.75rem] leading-[0.95] tracking-[-0.04em] sm:text-[3.5rem]">Command the day.</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">One clear view of today’s work. Nutrition and daily weight are active; training and photos are next to join the system.</p>
+          <p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">Protein log · Day {props.dayNumber}</p>
+          <h1 className="mt-2 font-display text-[2.75rem] leading-[0.95] tracking-[-0.04em] sm:text-[3.5rem]">Fuel the day.</h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">Log protein and creatine for the selected day, with your latest weight setting the target.</p>
         </div>
         <div className="text-left sm:text-right">
           <p className="text-sm font-semibold">{formatDayHeading(props.selectedDate, props.today)}</p>
@@ -365,6 +386,30 @@ function DashboardView(props: DashboardProps) {
       </section>
 
       {props.error && <p role="alert" className="mt-4 flex items-center gap-2 text-sm text-error"><Minus size={15} />{props.error}</p>}
+
+      <section aria-labelledby="creatine-title" className="mt-7 flex flex-col gap-5 border border-line bg-paper p-5 paper-shadow sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-center gap-4">
+          <span className={`grid size-11 shrink-0 place-items-center ${props.creatineTaken ? "bg-gold text-ink" : "bg-canvas text-gold-dark"}`} aria-hidden="true">
+            {props.creatineTaken ? <Check size={19} strokeWidth={2.5} /> : <Pill size={19} />}
+          </span>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">Daily habit</p>
+            <h2 id="creatine-title" className="mt-1 font-display text-2xl">Creatine</h2>
+            <p className="mt-1 text-sm text-muted">
+              {props.creatineTaken === undefined ? "Checking status…" : props.creatineTaken ? "Marked as taken for this day." : "Not taken for this day."}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-pressed={props.creatineTaken ?? false}
+          disabled={props.creatineTaken === undefined || props.savingCreatine}
+          onClick={props.toggleCreatine}
+          className={`flex min-h-12 w-full items-center justify-center gap-2 px-5 text-sm font-bold transition-[background-color,color,transform] duration-150 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:min-w-48 ${props.creatineTaken ? "border border-line bg-canvas text-ink" : "bg-ink text-paper"}`}
+        >
+          {props.savingCreatine ? "Saving…" : props.creatineTaken ? <><Check size={16} /> Taken</> : "Mark as taken"}
+        </button>
+      </section>
 
       <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(330px,0.72fr)]">
         <section className="border border-line bg-paper paper-shadow">
@@ -575,8 +620,8 @@ function ProgramRow({ icon: Icon, label, detail, active = false }: { icon: typeo
   return <div className="flex min-h-14 items-center gap-3"><Icon size={16} className={active ? "text-gold-dark" : "text-faint"} /><span className={active ? "text-sm font-semibold" : "text-sm text-muted"}>{label}</span><span className="ml-auto text-[10px] font-bold tracking-[0.1em] text-faint uppercase">{detail}</span></div>;
 }
 
-function MeasurementsView({ today, baselineWeight }: { today: string; baselineWeight: number }) {
-  const [selectedDate, setSelectedDate] = useState(today);
+function MeasurementsView({ today, baselineWeight, initialDate }: { today: string; baselineWeight: number; initialDate?: string }) {
+  const [selectedDate, setSelectedDate] = useState(() => initialDate && initialDate <= today ? initialDate : today);
   const weights = useQuery(api.measurements.getWeights, { startDate: addDays(today, -89), endDate: today });
   const saveWeight = useMutation(api.measurements.saveWeight);
   const removeWeight = useMutation(api.measurements.removeWeight);
@@ -769,6 +814,10 @@ function WeightChart({ data }: { data: Doc<"weightMeasurements">[] }) {
 
 function periodRange(view: CalendarView, cursor: Date) {
   const date = new Date(cursor);
+  if (view === "day") {
+    const day = localDateKey(date);
+    return { start: day, end: day };
+  }
   if (view === "week") {
     const offset = (date.getDay() + 6) % 7;
     date.setDate(date.getDate() - offset);
@@ -782,7 +831,8 @@ function periodRange(view: CalendarView, cursor: Date) {
 
 function shiftPeriod(view: CalendarView, cursor: Date, amount: number) {
   const next = new Date(cursor);
-  if (view === "week") next.setDate(next.getDate() + amount * 7);
+  if (view === "day") next.setDate(next.getDate() + amount);
+  else if (view === "week") next.setDate(next.getDate() + amount * 7);
   else if (view === "month") next.setMonth(next.getMonth() + amount);
   else next.setFullYear(next.getFullYear() + amount);
   return next;
@@ -792,25 +842,148 @@ function datesInRange(start: string, end: string) {
   return Array.from({ length: daysBetween(start, end) + 1 }, (_, index) => addDays(start, index));
 }
 
-function ProgressCalendar({ today, goal, startDate, onOpenDay }: { today: string; goal: number; startDate: string; onOpenDay: (date: string) => void }) {
-  const [view, setView] = useState<CalendarView>("month");
-  const [cursor, setCursor] = useState(() => dateFromKey(today));
-  const range = periodRange(view, cursor);
-  const progress = useQuery(api.protein.getProgress, { startDate: range.start, endDate: range.end });
-  const totals = new Map(progress?.map((item) => [item.date, item.protein]));
-  const eligibleDates = datesInRange(range.start, range.end).filter((date) => date <= today && date >= startDate);
-  const completed = eligibleDates.filter((date) => meetsProteinSuccess(totals.get(date) ?? 0, goal)).length;
-  const tracked = eligibleDates.filter((date) => (totals.get(date) ?? 0) > 0);
-  const average = tracked.length ? tracked.reduce((sum, date) => sum + (totals.get(date) ?? 0), 0) / tracked.length : 0;
-  const completion = Math.round((completed / Math.max(1, eligibleDates.length)) * 100);
+type CalendarDayProgress = {
+  date: string;
+  protein: number;
+  workout: boolean;
+  creatine: boolean;
+  measurement: boolean;
+};
 
-  let streak = 0;
-  for (let date = today; date >= startDate; date = addDays(date, -1)) {
-    if (meetsProteinSuccess(totals.get(date) ?? 0, goal)) streak += 1;
-    else if (date !== today) break;
+function emptyCalendarDay(date: string): CalendarDayProgress {
+  return { date, protein: 0, workout: false, creatine: false, measurement: false };
+}
+
+function completedSignals(day: CalendarDayProgress, goal: number) {
+  return Number(meetsProteinSuccess(day.protein, goal))
+    + Number(day.workout)
+    + Number(day.creatine)
+    + Number(day.measurement);
+}
+
+function calendarDayLabel(day: CalendarDayProgress, goal: number) {
+  const proteinStatus = meetsProteinSuccess(day.protein, goal)
+    ? `protein complete at ${formatGrams(day.protein)} grams`
+    : day.protein > 0
+      ? `${formatGrams(day.protein)} grams of protein logged`
+      : "protein not logged";
+  return `${dateFromKey(day.date).toLocaleDateString("en", { month: "long", day: "numeric" })}: ${completedSignals(day, goal)} of 4 complete; ${proteinStatus}; ${day.workout ? "workout complete" : "no workout"}; ${day.creatine ? "creatine taken" : "creatine not taken"}; ${day.measurement ? "measurement taken" : "no measurement"}`;
+}
+
+function signalColor(complete: boolean, partial = false, future = false) {
+  if (future || (!complete && !partial)) return "border border-line bg-canvas text-faint";
+  if (partial) return "bg-gold-soft text-gold-dark";
+  return "bg-gold text-ink";
+}
+
+function DaySignalTiles({ day, goal, future = false }: { day: CalendarDayProgress; goal: number; future?: boolean }) {
+  const proteinComplete = meetsProteinSuccess(day.protein, goal);
+  return (
+    <span className="grid grid-cols-4 gap-1" aria-hidden="true">
+      <span className={`grid aspect-square place-items-center text-[8px] font-bold sm:text-[9px] ${signalColor(proteinComplete, day.protein > 0 && !proteinComplete, future)}`}>P</span>
+      <span className={`grid aspect-square place-items-center text-[8px] font-bold sm:text-[9px] ${signalColor(day.workout, false, future)}`}>W</span>
+      <span className={`grid aspect-square place-items-center text-[8px] font-bold sm:text-[9px] ${signalColor(day.creatine, false, future)}`}>C</span>
+      <span className={`grid aspect-square place-items-center text-[8px] font-bold sm:text-[9px] ${signalColor(day.measurement, false, future)}`}>M</span>
+    </span>
+  );
+}
+
+function DayActionCard({ icon: Icon, title, status, detail, href, action, complete, partial = false }: {
+  icon: typeof Target;
+  title: string;
+  status: string;
+  detail: string;
+  href: string;
+  action: string;
+  complete: boolean;
+  partial?: boolean;
+}) {
+  return (
+    <section className="flex min-h-56 flex-col border border-line bg-paper p-5">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`grid size-11 place-items-center ${complete ? "bg-gold text-ink" : partial ? "bg-gold-soft text-gold-dark" : "bg-canvas text-faint"}`} aria-hidden="true"><Icon size={18} /></span>
+        <span className={`flex min-h-8 items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] uppercase ${complete ? "text-success" : partial ? "text-gold-dark" : "text-faint"}`}>{complete && <Check size={13} />}{status}</span>
+      </div>
+      <h3 className="mt-5 font-display text-2xl">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-muted">{detail}</p>
+      <Link href={href} className="mt-auto flex min-h-11 items-center gap-2 pt-4 text-xs font-bold text-gold-dark">{action}<ArrowUpRight size={14} /></Link>
+    </section>
+  );
+}
+
+function DayOverview({ day, goal }: { day: CalendarDayProgress; goal: number }) {
+  const setCreatineTaken = useMutation(api.protein.setCreatineTaken);
+  const [savingCreatine, setSavingCreatine] = useState(false);
+  const [error, setError] = useState("");
+  const proteinComplete = meetsProteinSuccess(day.protein, goal);
+  const score = completedSignals(day, goal);
+  const encodedDate = encodeURIComponent(day.date);
+
+  async function toggleCreatine() {
+    setSavingCreatine(true);
+    setError("");
+    try {
+      await setCreatineTaken({ date: day.date, taken: !day.creatine });
+    } catch {
+      setError("Creatine status could not be saved. Try again.");
+    } finally {
+      setSavingCreatine(false);
+    }
   }
 
-  const title = view === "week"
+  return (
+    <div className="p-5 sm:p-7">
+      <div className="flex flex-col justify-between gap-4 border-b border-line pb-6 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">Daily command</p>
+          <h3 className="mt-1 font-display text-3xl">{score === 4 ? "Day complete." : `${score} of 4 complete.`}</h3>
+          <p className="mt-2 text-sm text-muted">Manage every daily signal from one place.</p>
+        </div>
+        <p className="font-display text-4xl tabular-nums">{score * 25}<span className="text-lg text-muted">%</span></p>
+      </div>
+      <div className="mt-5 h-2 bg-canvas" role="progressbar" aria-label="Overall daily progress" aria-valuenow={score * 25} aria-valuemin={0} aria-valuemax={100}><span className="block h-full bg-gold transition-[width] duration-500" style={{ width: `${score * 25}%` }} /></div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <DayActionCard icon={Target} title="Protein" status={proteinComplete ? "Complete" : day.protein > 0 ? "In progress" : "Not started"} detail={`${formatGrams(day.protein)} of ${goal} g logged`} href={`/protein?date=${encodedDate}`} action="Open protein log" complete={proteinComplete} partial={day.protein > 0} />
+        <DayActionCard icon={Dumbbell} title="Workout" status={day.workout ? "Complete" : "Not logged"} detail={day.workout ? "Workout recorded for this day." : "Log strength training or an activity."} href={`/training?date=${encodedDate}`} action={day.workout ? "View training" : "Log workout"} complete={day.workout} />
+
+        <section className="flex min-h-56 flex-col border border-line bg-paper p-5">
+          <div className="flex items-start justify-between gap-3">
+            <span className={`grid size-11 place-items-center ${day.creatine ? "bg-gold text-ink" : "bg-canvas text-faint"}`} aria-hidden="true"><Pill size={18} /></span>
+            <span className={`flex min-h-8 items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] uppercase ${day.creatine ? "text-success" : "text-faint"}`}>{day.creatine && <Check size={13} />}{day.creatine ? "Taken" : "Not taken"}</span>
+          </div>
+          <h3 className="mt-5 font-display text-2xl">Creatine</h3>
+          <p className="mt-2 text-sm leading-6 text-muted">One daily check—no dosage or extra fields.</p>
+          <button type="button" aria-pressed={day.creatine} disabled={savingCreatine} onClick={toggleCreatine} className={`mt-auto min-h-11 px-4 text-xs font-bold active:scale-[0.98] disabled:cursor-wait disabled:bg-muted ${day.creatine ? "border border-line bg-canvas text-ink" : "bg-ink text-paper"}`}>{savingCreatine ? "Saving…" : day.creatine ? "Mark as not taken" : "Mark as taken"}</button>
+          {error && <p role="alert" className="mt-2 text-xs text-error">{error}</p>}
+        </section>
+
+        <DayActionCard icon={Scale} title="Measurement" status={day.measurement ? "Complete" : "Not logged"} detail={day.measurement ? "Weight recorded for this day." : "Add your daily weigh-in."} href={`/measurements?date=${encodedDate}`} action={day.measurement ? "View measurement" : "Add measurement"} complete={day.measurement} />
+      </div>
+    </div>
+  );
+}
+
+function ProgressCalendar({ today, goal, startDate, onOpenDay }: { today: string; goal: number; startDate: string; onOpenDay: (date: string) => void }) {
+  const [view, setView] = useState<CalendarView>("day");
+  const [cursor, setCursor] = useState(() => dateFromKey(today));
+  const range = periodRange(view, cursor);
+  const progress = useQuery(api.protein.getCalendarProgress, { startDate: range.start, endDate: range.end });
+  const daysByDate = new Map(progress?.map((item) => [item.date, item]));
+  const eligibleDates = datesInRange(range.start, range.end).filter((date) => date <= today && date >= startDate);
+  const scores = eligibleDates.map((date) => completedSignals(daysByDate.get(date) ?? emptyCalendarDay(date), goal));
+  const completed = scores.filter((score) => score === 4).length;
+  const completion = Math.round((scores.reduce((sum, score) => sum + score, 0) / Math.max(1, scores.length * 4)) * 100);
+  let longestStreak = 0;
+  let runningStreak = 0;
+  for (const score of scores) {
+    runningStreak = score === 4 ? runningStreak + 1 : 0;
+    longestStreak = Math.max(longestStreak, runningStreak);
+  }
+
+  const title = view === "day"
+    ? formatDayHeading(range.start, today)
+    : view === "week"
     ? `${dateFromKey(range.start).toLocaleDateString("en", { month: "short", day: "numeric" })} — ${dateFromKey(range.end).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`
     : view === "month"
       ? cursor.toLocaleDateString("en", { month: "long", year: "numeric" })
@@ -819,54 +992,51 @@ function ProgressCalendar({ today, goal, startDate, onOpenDay }: { today: string
   return (
     <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 sm:py-10 xl:px-12">
       <header className="reveal flex flex-col justify-between gap-6 border-b border-line pb-7 md:flex-row md:items-end">
-        <div><p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">Proof of consistency</p><h1 className="mt-2 font-display text-[2.75rem] leading-none tracking-[-0.04em] sm:text-[3.5rem]">The calendar.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-muted">See the days you kept the promise. Gold marks days reaching at least 90% of your protein target; lighter days show work in progress.</p></div>
-        <div className="grid grid-cols-3 border border-line bg-paper p-1" role="tablist" aria-label="Calendar period">
-          {(["week", "month", "year"] as CalendarView[]).map((item) => <button type="button" key={item} role="tab" aria-selected={view === item} onClick={() => setView(item)} className={`min-h-11 px-4 text-xs font-bold capitalize ${view === item ? "bg-ink text-paper" : "text-muted"}`}>{item}</button>)}
+        <div><p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">{view === "day" ? "Today’s command" : "Proof of consistency"}</p><h1 className="mt-2 font-display text-[2.75rem] leading-none tracking-[-0.04em] sm:text-[3.5rem]">{view === "day" ? "Command the day." : "The calendar."}</h1><p className="mt-3 max-w-xl text-sm leading-6 text-muted">{view === "day" ? "Manage protein, training, creatine, and measurements without hunting through the app." : "See the whole day at a glance. A complete day checks all four."}</p></div>
+        <div className="grid grid-cols-4 border border-line bg-paper p-1" role="tablist" aria-label="Calendar period">
+          {(["day", "week", "month", "year"] as CalendarView[]).map((item) => <button type="button" key={item} role="tab" aria-selected={view === item} onClick={() => { if (item === "day" && localDateKey(cursor) > today) setCursor(dateFromKey(today)); setView(item); }} className={`min-h-11 px-3 text-xs font-bold capitalize sm:px-4 ${view === item ? "bg-ink text-paper" : "text-muted"}`}>{item}</button>)}
         </div>
       </header>
 
-      <section aria-label="Period summary" className="grid border-b border-line sm:grid-cols-3">
-        <Metric label="Successful days" value={`${completed} / ${eligibleDates.length}`} meta={`${completion}% reached 90%+`} />
-        <Metric label="Average logged" value={`${formatGrams(average)} g`} meta={tracked.length ? `Across ${tracked.length} tracked days` : "No logged days yet"} bordered />
-        <Metric label="Current streak" value={`${streak} ${streak === 1 ? "day" : "days"}`} meta="Consecutive successful days" bordered />
-      </section>
+      {view !== "day" && <section aria-label="Period summary" className="grid border-b border-line sm:grid-cols-3">
+        <Metric label="Complete days" value={`${completed} / ${eligibleDates.length}`} meta="All four signals complete" />
+        <Metric label="Overall progress" value={`${completion}%`} meta="Across all daily signals" bordered />
+        <Metric label="Best streak" value={`${longestStreak} ${longestStreak === 1 ? "day" : "days"}`} meta="Consecutive complete days" bordered />
+      </section>}
 
       <section className="mt-7 border border-line bg-paper paper-shadow">
         <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3 sm:px-6">
           <button type="button" onClick={() => setCursor(shiftPeriod(view, cursor, -1))} className="grid size-11 place-items-center text-muted" aria-label={`Previous ${view}`}><ChevronLeft size={19} /></button>
-          <h2 className="font-display text-xl sm:text-2xl">{title}</h2>
-          <button type="button" onClick={() => setCursor(shiftPeriod(view, cursor, 1))} className="grid size-11 place-items-center text-muted" aria-label={`Next ${view}`}><ChevronRight size={19} /></button>
+          <div className="text-center"><h2 className="font-display text-xl sm:text-2xl">{title}</h2>{view === "day" && range.start !== today && <button type="button" onClick={() => setCursor(dateFromKey(today))} className="mt-1 min-h-11 text-[10px] font-bold tracking-[0.1em] text-gold-dark uppercase">Return to today</button>}</div>
+          <button type="button" onClick={() => setCursor(shiftPeriod(view, cursor, 1))} disabled={view === "day" && range.start >= today} className="grid size-11 place-items-center text-muted disabled:text-faint/40" aria-label={`Next ${view}`}><ChevronRight size={19} /></button>
         </div>
-        {progress === undefined ? <div className="m-6 h-[430px] animate-pulse bg-canvas" /> : view === "week" ? <WeekGrid range={range} totals={totals} goal={goal} today={today} onOpenDay={onOpenDay} /> : view === "month" ? <MonthGrid cursor={cursor} totals={totals} goal={goal} today={today} onOpenDay={onOpenDay} /> : <YearGrid year={cursor.getFullYear()} totals={totals} goal={goal} today={today} />}
+        {progress === undefined ? <div className="m-6 h-[430px] animate-pulse bg-canvas" /> : view === "day" ? <DayOverview day={daysByDate.get(range.start) ?? emptyCalendarDay(range.start)} goal={goal} /> : view === "week" ? <WeekGrid range={range} daysByDate={daysByDate} goal={goal} today={today} onOpenDay={onOpenDay} /> : view === "month" ? <MonthGrid cursor={cursor} daysByDate={daysByDate} goal={goal} today={today} onOpenDay={onOpenDay} /> : <YearGrid year={cursor.getFullYear()} daysByDate={daysByDate} goal={goal} today={today} />}
       </section>
 
-      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted">
-        <span className="flex items-center gap-2"><span className="size-3 bg-gold" /> Success · 90%+</span>
-        <span className="flex items-center gap-2"><span className="size-3 bg-gold-soft" /> Protein logged</span>
-        <span className="flex items-center gap-2"><span className="size-3 border border-line bg-canvas" /> No entry</span>
-      </div>
+      {view !== "day" && <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted" aria-label="Calendar legend">
+        {[['P', 'Protein · 90%+'], ['W', 'Workout'], ['C', 'Creatine'], ['M', 'Measurement']].map(([symbol, label]) => <span key={symbol} className="flex items-center gap-2"><span className="grid size-5 place-items-center bg-gold text-[8px] font-bold text-ink">{symbol}</span>{label}</span>)}
+        <span className="flex items-center gap-2"><span className="grid size-5 place-items-center bg-gold-soft text-[8px] font-bold text-gold-dark">P</span>Protein in progress</span>
+      </div>}
     </div>
   );
 }
 
-function progressColors(value: number, goal: number, isFuture: boolean) {
-  if (isFuture || value === 0) return "bg-canvas";
-  if (meetsProteinSuccess(value, goal)) return "bg-gold";
-  return "bg-gold-soft";
+function WeekSignal({ icon: Icon, label, value, complete, partial = false }: { icon: typeof Target; label: string; value: string; complete: boolean; partial?: boolean }) {
+  return <span className={`flex min-h-9 items-center gap-2 text-[11px] ${complete ? "text-ink" : partial ? "text-gold-dark" : "text-faint"}`}><Icon size={13} className="shrink-0" /><span className="min-w-0 flex-1 truncate">{label}</span><span className="shrink-0 tabular-nums">{value}</span></span>;
 }
 
-function WeekGrid({ range, totals, goal, today, onOpenDay }: { range: { start: string; end: string }; totals: Map<string, number>; goal: number; today: string; onOpenDay: (date: string) => void }) {
-  return <div className="grid gap-px bg-line sm:grid-cols-7">{datesInRange(range.start, range.end).map((date) => { const value = totals.get(date) ?? 0; const percent = Math.min(100, (value / goal) * 100); return <button type="button" key={date} onClick={() => onOpenDay(date)} disabled={date > today} className="flex min-h-[170px] flex-col bg-paper p-4 text-left disabled:cursor-default sm:min-h-[340px]"><span className="text-[10px] font-bold tracking-[0.14em] text-muted uppercase">{dateFromKey(date).toLocaleDateString("en", { weekday: "short" })}</span><span className={`mt-2 font-display text-3xl ${date === today ? "text-gold-dark" : ""}`}>{dateFromKey(date).getDate()}</span><div className="mt-auto"><p className="mb-3 text-xs tabular-nums text-muted">{value ? `${formatGrams(value)} / ${goal} g` : date > today ? "Ahead" : "No entry"}</p><div className="h-20 bg-canvas sm:h-36"><div className="h-full origin-bottom bg-gold transition-transform duration-500" style={{ transform: `scaleY(${percent / 100})` }} /></div></div></button>; })}</div>;
+function WeekGrid({ range, daysByDate, goal, today, onOpenDay }: { range: { start: string; end: string }; daysByDate: Map<string, CalendarDayProgress>; goal: number; today: string; onOpenDay: (date: string) => void }) {
+  return <div className="grid gap-px bg-line sm:grid-cols-7">{datesInRange(range.start, range.end).map((date) => { const day = daysByDate.get(date) ?? emptyCalendarDay(date); const score = completedSignals(day, goal); const future = date > today; return <button type="button" key={date} onClick={() => onOpenDay(date)} disabled={future} aria-label={future ? `${dateFromKey(date).toLocaleDateString("en", { month: "long", day: "numeric" })}: ahead` : calendarDayLabel(day, goal)} className="flex min-h-[230px] flex-col bg-paper p-4 text-left active:scale-[0.99] disabled:cursor-default sm:min-h-[330px]"><span className="text-[10px] font-bold tracking-[0.14em] text-muted uppercase">{dateFromKey(date).toLocaleDateString("en", { weekday: "short" })}</span><span className={`mt-2 font-display text-3xl ${date === today ? "text-gold-dark" : ""}`}>{dateFromKey(date).getDate()}</span>{future ? <span className="mt-auto text-xs text-faint">Ahead</span> : <><div className="mt-5 h-1.5 bg-canvas"><span className="block h-full bg-gold transition-[width] duration-500" style={{ width: `${score * 25}%` }} /></div><p className="mt-2 text-[10px] font-bold tracking-[0.12em] text-muted uppercase">{score} / 4 complete</p><span className="mt-auto grid divide-y divide-line"><WeekSignal icon={Target} label="Protein" value={`${formatGrams(day.protein)}g`} complete={meetsProteinSuccess(day.protein, goal)} partial={day.protein > 0} /><WeekSignal icon={Dumbbell} label="Workout" value={day.workout ? "Done" : "—"} complete={day.workout} /><WeekSignal icon={Pill} label="Creatine" value={day.creatine ? "Taken" : "—"} complete={day.creatine} /><WeekSignal icon={Scale} label="Measure" value={day.measurement ? "Done" : "—"} complete={day.measurement} /></span></>}</button>; })}</div>;
 }
 
-function MonthGrid({ cursor, totals, goal, today, onOpenDay }: { cursor: Date; totals: Map<string, number>; goal: number; today: string; onOpenDay: (date: string) => void }) {
+function MonthGrid({ cursor, daysByDate, goal, today, onOpenDay }: { cursor: Date; daysByDate: Map<string, CalendarDayProgress>; goal: number; today: string; onOpenDay: (date: string) => void }) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = new Date(first);
   gridStart.setDate(first.getDate() - ((first.getDay() + 6) % 7));
   const days = Array.from({ length: 42 }, (_, index) => { const date = new Date(gridStart); date.setDate(date.getDate() + index); return localDateKey(date); });
-  return <div><div className="grid grid-cols-7 border-b border-line">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="px-2 py-3 text-center text-[9px] font-bold tracking-[0.12em] text-muted uppercase sm:text-[10px]">{day}</div>)}</div><div className="grid grid-cols-7 gap-px bg-line">{days.map((date) => { const value = totals.get(date) ?? 0; const currentMonth = dateFromKey(date).getMonth() === cursor.getMonth(); return <button type="button" key={date} onClick={() => onOpenDay(date)} disabled={date > today} aria-label={`${dateFromKey(date).toLocaleDateString("en", { month: "long", day: "numeric" })}: ${value ? `${formatGrams(value)} grams` : "no entry"}`} className={`relative min-h-16 bg-paper p-2 text-left active:scale-[0.98] sm:min-h-24 sm:p-3 ${currentMonth ? "" : "text-faint"}`}><span className={`text-xs font-semibold tabular-nums ${date === today ? "text-gold-dark underline underline-offset-4" : ""}`}>{dateFromKey(date).getDate()}</span>{currentMonth && <span className={`absolute bottom-2 left-2 right-2 h-2 sm:bottom-3 sm:left-3 sm:right-3 ${progressColors(value, goal, date > today)}`}><span className="sr-only">{meetsProteinSuccess(value, goal) ? "Successful day" : value > 0 ? "Protein logged" : "No entry"}</span></span>}{value > 0 && currentMonth && <span className="absolute right-2 top-2 hidden text-[9px] tabular-nums text-muted sm:block">{formatGrams(value)}g</span>}</button>; })}</div></div>;
+  return <div><div className="grid grid-cols-7 border-b border-line">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="px-1 py-3 text-center text-[9px] font-bold tracking-[0.1em] text-muted uppercase sm:px-2 sm:text-[10px]">{day}</div>)}</div><div className="grid grid-cols-7 gap-px bg-line">{days.map((date) => { const day = daysByDate.get(date) ?? emptyCalendarDay(date); const currentMonth = dateFromKey(date).getMonth() === cursor.getMonth(); const future = date > today; const score = completedSignals(day, goal); return <button type="button" key={date} onClick={() => onOpenDay(date)} disabled={future} aria-label={future ? `${dateFromKey(date).toLocaleDateString("en", { month: "long", day: "numeric" })}: ahead` : calendarDayLabel(day, goal)} className={`flex min-h-20 flex-col bg-paper p-1.5 text-left active:scale-[0.98] disabled:cursor-default sm:min-h-28 sm:p-3 ${currentMonth ? "" : "opacity-40"}`}><span className="flex items-center justify-between gap-1"><span className={`text-xs font-semibold tabular-nums ${date === today ? "text-gold-dark underline underline-offset-4" : ""}`}>{dateFromKey(date).getDate()}</span>{currentMonth && !future && <span className="text-[8px] font-bold tabular-nums text-muted sm:text-[9px]">{score}/4</span>}</span>{currentMonth && <span className="mt-auto"><DaySignalTiles day={day} goal={goal} future={future} /></span>}</button>; })}</div></div>;
 }
 
-function YearGrid({ year, totals, goal, today }: { year: number; totals: Map<string, number>; goal: number; today: string }) {
-  return <div className="grid gap-px bg-line md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 12 }, (_, month) => { const first = new Date(year, month, 1); const leading = (first.getDay() + 6) % 7; const days = new Date(year, month + 1, 0).getDate(); return <div key={month} className="bg-paper p-4 sm:p-5"><h3 className="font-display text-xl">{first.toLocaleDateString("en", { month: "long" })}</h3><div className="mt-4 grid grid-cols-7 gap-1">{Array.from({ length: leading }, (_, index) => <span key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = localDateKey(new Date(year, month, index + 1)); const value = totals.get(date) ?? 0; return <span key={date} title={`${date}: ${value} g`} className={`aspect-square min-h-2 ${progressColors(value, goal, date > today)}`}><span className="sr-only">{date}: {value} grams</span></span>; })}</div></div>; })}</div>;
+function YearGrid({ year, daysByDate, goal, today }: { year: number; daysByDate: Map<string, CalendarDayProgress>; goal: number; today: string }) {
+  return <div className="grid gap-px bg-line md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 12 }, (_, month) => { const first = new Date(year, month, 1); const leading = (first.getDay() + 6) % 7; const days = new Date(year, month + 1, 0).getDate(); return <div key={month} className="bg-paper p-4 sm:p-5"><h3 className="font-display text-xl">{first.toLocaleDateString("en", { month: "long" })}</h3><div className="mt-4 grid grid-cols-7 gap-1">{Array.from({ length: leading }, (_, index) => <span key={`blank-${index}`} />)}{Array.from({ length: days }, (_, index) => { const date = localDateKey(new Date(year, month, index + 1)); const day = daysByDate.get(date) ?? emptyCalendarDay(date); const future = date > today; const proteinComplete = meetsProteinSuccess(day.protein, goal); return <span key={date} role="img" aria-label={future ? `${date}: ahead` : calendarDayLabel(day, goal)} className="grid aspect-square grid-cols-2 gap-px bg-line p-px"><span className={signalColor(proteinComplete, day.protein > 0 && !proteinComplete, future)} /><span className={signalColor(day.workout, false, future)} /><span className={signalColor(day.creatine, false, future)} /><span className={signalColor(day.measurement, false, future)} /></span>; })}</div></div>; })}</div>;
 }
