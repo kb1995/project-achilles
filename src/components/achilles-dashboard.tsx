@@ -149,15 +149,15 @@ function AppNavigation({ active }: { active: AppView }) {
         </div>
       </aside>
 
-      <header className="flex h-[68px] items-center justify-between border-b border-line bg-paper px-5 lg:hidden">
+      <header className="flex h-16 items-center justify-between gap-3 border-b border-line bg-paper px-4 sm:h-[68px] sm:px-5 lg:hidden">
         <Link href="/overview" className="flex min-h-11 items-center gap-3">
           <AchillesMark className="h-8 w-8 text-gold-dark" />
           <span className="font-display text-2xl">Achilles</span>
         </Link>
-        <span className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">365-day ascent</span>
+        <span className="hidden text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase min-[370px]:block">365-day ascent</span>
       </header>
 
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-paper px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 lg:hidden">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-paper px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 sm:px-2 sm:pt-2 lg:hidden">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -165,7 +165,7 @@ function AppNavigation({ active }: { active: AppView }) {
               key={item.id}
               href={item.href}
               aria-current={active === item.id ? "page" : undefined}
-              className={`flex min-h-12 flex-col items-center justify-center gap-1 text-[11px] font-semibold ${active === item.id ? "text-gold-dark" : "text-muted"}`}
+              className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] font-semibold sm:text-[11px] ${active === item.id ? "text-gold-dark" : "text-muted"}`}
             >
               <Icon size={18} /> {item.label}
             </Link>
@@ -272,7 +272,7 @@ export function AchillesDashboard({ activeView, initialDate }: { activeView: App
       <a href="#main-content" className="fixed left-3 top-3 z-50 -translate-y-20 bg-ink px-4 py-3 text-sm text-paper focus:translate-y-0">Skip to content</a>
       <AppNavigation active={activeView} />
 
-      <main id="main-content" className="pb-24 lg:ml-[236px] lg:pb-0">
+      <main id="main-content" className="pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:ml-[236px] lg:pb-0">
         {activeView === "protein" ? (
           <ProteinLogView
             today={today}
@@ -361,11 +361,11 @@ function ProteinLogView(props: ProteinLogProps) {
   const recentDays = Array.from({ length: 7 }, (_, index) => addDays(props.today, index - 6));
 
   return (
-    <div className="mx-auto max-w-[1320px] px-5 py-7 sm:px-8 sm:py-10 xl:px-12">
-      <header className="reveal flex flex-col justify-between gap-5 border-b border-line pb-7 sm:flex-row sm:items-end">
+    <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-8 sm:py-10 xl:px-12">
+      <header className="reveal flex flex-col justify-between gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:gap-5 sm:pb-7">
         <div>
           <p className="text-[10px] font-bold tracking-[0.18em] text-gold-dark uppercase">Protein log · Day {props.dayNumber}</p>
-          <h1 className="mt-2 font-display text-[2.75rem] leading-[0.95] tracking-[-0.04em] sm:text-[3.5rem]">Fuel the day.</h1>
+          <h1 className="mt-2 font-display text-[2.5rem] leading-[0.95] tracking-[-0.04em] sm:text-[3.5rem]">Fuel the day.</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-muted">Log protein and creatine for the selected day, with your latest weight setting the target.</p>
         </div>
         <div className="text-left sm:text-right">
@@ -374,20 +374,20 @@ function ProteinLogView(props: ProteinLogProps) {
         </div>
       </header>
 
-      <section aria-label="Key metrics" className="reveal reveal-late grid border-b border-line sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Protein today" value={`${formatGrams(props.consumed)} / ${props.goal} g`} meta={`${Math.round(props.percent)}% complete`} />
-        <div className="border-b border-line py-5 sm:border-b-0 sm:border-l sm:pl-6 xl:pr-6">
+      <section aria-label="Key metrics" className="reveal reveal-late grid grid-cols-2 border-b border-line xl:grid-cols-4">
+        <Metric label="Protein today" value={`${formatGrams(props.consumed)} / ${props.goal} g`} meta={`${Math.round(props.percent)}% complete`} className="pr-3 sm:pr-6" />
+        <div className="min-w-0 border-l border-line py-4 pl-4 sm:py-5 sm:pl-6 xl:pr-6">
           <p className="text-[10px] font-bold tracking-[0.15em] text-muted uppercase">Weight used today</p>
-          <button type="button" onClick={props.onOpenMeasurements} className="mt-1 min-h-11 font-display text-3xl tabular-nums underline decoration-line underline-offset-4">{props.weightKg} kg</button>
+          <button type="button" onClick={props.onOpenMeasurements} className="mt-1 min-h-11 font-display text-[1.65rem] tabular-nums underline decoration-line underline-offset-4 sm:text-3xl">{props.weightKg} kg</button>
           <p className="text-[11px] text-faint">From {props.weightSource === "today" ? "today’s weigh-in" : props.weightSource === "yesterday" ? "yesterday’s weigh-in" : "your saved baseline"}</p>
         </div>
-        <Metric label="30-day consistency" value={`${props.consistency}%`} meta="Days reaching 90%+" bordered />
-        <Metric label="Journey" value={`${props.dayNumber} / 365`} meta={`${365 - props.dayNumber} days remain`} bordered />
+        <Metric label="30-day consistency" value={`${props.consistency}%`} meta="Days reaching 90%+" className="border-t border-line pr-3 sm:pr-6 xl:border-l xl:pl-6" />
+        <Metric label="Journey" value={`${props.dayNumber} / 365`} meta={`${365 - props.dayNumber} days remain`} className="border-l border-t border-line pl-4 sm:pl-6 xl:border-t-0" />
       </section>
 
       {props.error && <p role="alert" className="mt-4 flex items-center gap-2 text-sm text-error"><Minus size={15} />{props.error}</p>}
 
-      <section aria-labelledby="creatine-title" className="mt-7 flex flex-col gap-5 border border-line bg-paper p-5 paper-shadow sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <section aria-labelledby="creatine-title" className="mt-6 flex flex-col gap-4 border border-line bg-paper p-4 paper-shadow sm:mt-7 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:p-6">
         <div className="flex items-center gap-4">
           <span className={`grid size-11 shrink-0 place-items-center ${props.creatineTaken ? "bg-gold text-ink" : "bg-canvas text-gold-dark"}`} aria-hidden="true">
             {props.creatineTaken ? <Check size={19} strokeWidth={2.5} /> : <Pill size={19} />}
@@ -411,8 +411,8 @@ function ProteinLogView(props: ProteinLogProps) {
         </button>
       </section>
 
-      <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(330px,0.72fr)]">
-        <section className="border border-line bg-paper paper-shadow">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-4 sm:mt-7 sm:gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(330px,0.72fr)]">
+        <section className="min-w-0 border border-line bg-paper paper-shadow">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-7">
             <div className="flex items-center gap-3"><Target size={17} className="text-gold-dark" /><h2 className="text-sm font-bold">Daily protein</h2></div>
             <div className="flex items-center gap-1">
@@ -421,13 +421,13 @@ function ProteinLogView(props: ProteinLogProps) {
             </div>
           </div>
 
-          <div className="px-5 py-7 sm:px-7 sm:py-8">
+          <div className="px-4 py-6 sm:px-7 sm:py-8">
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div>
-                <p className="font-display text-[3.75rem] leading-none tabular-nums sm:text-[4.5rem]">{formatGrams(props.consumed)}<span className="ml-2 text-2xl text-muted">g</span></p>
+                <p className="font-display text-[3.25rem] leading-none tabular-nums sm:text-[4.5rem]">{formatGrams(props.consumed)}<span className="ml-2 text-xl text-muted sm:text-2xl">g</span></p>
                 <p className="mt-2 text-sm text-muted">{formatGrams(props.remaining)} g remaining of your {props.goal} g target</p>
               </div>
-              {meetsProteinSuccess(props.consumed, props.goal) ? <span className="flex min-h-11 items-center gap-2 text-sm font-bold text-success"><Check size={17} /> Day marked successful · 90%+</span> : <div className="text-right text-xs text-muted"><p>0.7 g protein × {formatGrams(kilogramsToPounds(props.weightKg))} lb</p><p className="mt-1 text-faint">Converted from {formatGrams(props.weightKg)} kg · using {props.weightSource === "today" ? "today’s" : props.weightSource === "yesterday" ? "yesterday’s" : "baseline"} weight</p></div>}
+              {meetsProteinSuccess(props.consumed, props.goal) ? <span className="flex min-h-11 items-center gap-2 text-sm font-bold text-success"><Check size={17} /> Day marked successful · 90%+</span> : <div className="text-left text-xs text-muted sm:text-right"><p>0.7 g protein × {formatGrams(kilogramsToPounds(props.weightKg))} lb</p><p className="mt-1 text-faint">Converted from {formatGrams(props.weightKg)} kg · using {props.weightSource === "today" ? "today’s" : props.weightSource === "yesterday" ? "yesterday’s" : "baseline"} weight</p></div>}
             </div>
             <div className="mt-7 h-3 bg-canvas" role="progressbar" aria-label="Daily protein progress" aria-valuenow={Math.round(props.percent)} aria-valuemin={0} aria-valuemax={100}>
               <div className="h-full bg-gold transition-[width] duration-500" style={{ width: `${props.percent}%` }} />
@@ -438,9 +438,9 @@ function ProteinLogView(props: ProteinLogProps) {
                 <h3 className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">Quick add</h3>
                 <span className="text-[11px] text-faint">One serving</span>
               </div>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
+              <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {foods.map((food) => (
-                  <button type="button" key={food.name} onClick={() => props.quickAdd(food)} disabled={props.pendingFood !== null} className="lift flex min-h-[104px] min-w-[130px] flex-col border border-line bg-canvas p-3 text-left transition-[transform,border-color] duration-150 active:scale-[0.98] disabled:cursor-wait sm:min-w-0 sm:flex-1">
+                  <button type="button" key={food.name} onClick={() => props.quickAdd(food)} disabled={props.pendingFood !== null} className="lift flex min-h-[104px] w-[42vw] min-w-[124px] max-w-[145px] snap-start flex-col border border-line bg-canvas p-3 text-left transition-[transform,border-color] duration-150 active:scale-[0.98] disabled:cursor-wait sm:w-auto sm:min-w-0 sm:max-w-none sm:flex-1">
                     <span className="text-[10px] font-bold tracking-[0.1em] text-gold-dark">{props.pendingFood === food.name ? "···" : food.symbol}</span>
                     <span className="mt-auto text-xs font-semibold">{food.name}</span>
                     <span className="mt-1 text-[11px] tabular-nums text-muted">+{food.protein} g</span>
@@ -453,7 +453,7 @@ function ProteinLogView(props: ProteinLogProps) {
           </div>
         </section>
 
-        <aside className="flex min-h-[440px] flex-col bg-ink p-5 text-paper paper-shadow sm:p-7">
+        <aside className="flex min-h-[360px] flex-col bg-ink p-5 text-paper paper-shadow sm:min-h-[440px] sm:p-7">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-[10px] font-bold tracking-[0.17em] text-gold uppercase">Day’s log</h2>
             <span className="text-xs text-paper/50">{entries?.length ?? 0} entries</span>
@@ -491,17 +491,17 @@ function ProteinLogView(props: ProteinLogProps) {
         </aside>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <section className="border border-line bg-paper p-5 sm:p-7">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col items-start justify-between gap-2 min-[380px]:flex-row min-[380px]:gap-4">
             <div><p className="text-[10px] font-bold tracking-[0.16em] text-gold-dark uppercase">Consistency</p><h2 className="mt-1 font-display text-3xl">Last seven days</h2></div>
             <button type="button" onClick={props.onOpenCalendar} className="flex min-h-11 items-center gap-2 text-xs font-bold text-gold-dark">Full calendar <ArrowUpRight size={15} /></button>
           </div>
-          <div className="mt-7 grid grid-cols-7 gap-2">
+          <div className="mt-6 grid grid-cols-7 gap-1.5 sm:mt-7 sm:gap-2">
             {recentDays.map((date) => {
               const value = recentMap.get(date) ?? 0;
               const dayPercent = Math.min(100, (value / props.goal) * 100);
-              return <div key={date} className="text-center"><div className="mx-auto flex h-24 max-w-10 items-end bg-canvas"><div className="w-full bg-gold transition-[height] duration-500" style={{ height: `${dayPercent}%` }} /></div><p className="mt-2 text-[10px] font-bold text-muted">{dateFromKey(date).toLocaleDateString("en", { weekday: "narrow" })}</p></div>;
+              return <div key={date} className="text-center"><div className="mx-auto flex h-20 max-w-10 items-end bg-canvas sm:h-24"><div className="w-full bg-gold transition-[height] duration-500" style={{ height: `${dayPercent}%` }} /></div><p className="mt-2 text-[10px] font-bold text-muted">{dateFromKey(date).toLocaleDateString("en", { weekday: "narrow" })}</p></div>;
             })}
           </div>
         </section>
@@ -554,7 +554,7 @@ function NutPortionPicker({
 
   return (
     <form onSubmit={handleSubmit} className="mt-5 border-t border-line pt-5">
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-col items-start justify-between gap-2 min-[380px]:flex-row min-[380px]:items-end min-[380px]:gap-3">
         <div>
           <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">Nuts by weight</p>
           <p className="mt-1 text-xs text-faint">Choose a nut, then log the portion you ate.</p>
@@ -612,8 +612,8 @@ function NutPortionPicker({
   );
 }
 
-function Metric({ label, value, meta, bordered = false }: { label: string; value: string; meta: string; bordered?: boolean }) {
-  return <div className={`border-b border-line py-5 sm:border-b-0 ${bordered ? "sm:border-l sm:pl-6" : "xl:pr-6"}`}><p className="text-[10px] font-bold tracking-[0.15em] text-muted uppercase">{label}</p><p className="mt-1 font-display text-3xl tabular-nums">{value}</p><p className="mt-1 text-[11px] text-faint">{meta}</p></div>;
+function Metric({ label, value, meta, bordered = false, className = "" }: { label: string; value: string; meta: string; bordered?: boolean; className?: string }) {
+  return <div className={`min-w-0 border-b border-line py-4 sm:py-5 sm:border-b-0 ${bordered ? "sm:border-l sm:pl-6" : "xl:pr-6"} ${className}`}><p className="text-[10px] font-bold tracking-[0.15em] text-muted uppercase">{label}</p><p className="mt-1 font-display text-[1.65rem] leading-tight tabular-nums sm:text-3xl">{value}</p><p className="mt-1 text-[11px] text-faint">{meta}</p></div>;
 }
 
 function ProgramRow({ icon: Icon, label, detail, active = false }: { icon: typeof Target; label: string; detail: string; active?: boolean }) {
