@@ -29,7 +29,7 @@ type AppView = "overview" | "protein" | "training" | "measurements";
 type CalendarView = "day" | "week" | "month" | "year";
 
 const challengeStartDate = "2026-08-10";
-const proteinSuccessRatio = 0.9;
+const proteinSuccessRatio = 0.95;
 const poundsPerKilogram = 2.2046226218;
 const proteinGramsPerPound = 0.7;
 
@@ -44,7 +44,9 @@ const foods = [
 
 const nuts = [
   { name: "Almonds", proteinPer100g: 21.2, symbol: "AL" },
+  { name: "Dry-roasted edamame", proteinPer100g: 43.3, symbol: "ED" },
   { name: "Hazelnuts", proteinPer100g: 15, symbol: "HZ" },
+  { name: "Peanuts", proteinPer100g: 25.8, symbol: "PE" },
   { name: "Pistachios", proteinPer100g: 20.2, symbol: "PI" },
 ] as const;
 
@@ -381,7 +383,7 @@ function ProteinLogView(props: ProteinLogProps) {
           <button type="button" onClick={props.onOpenMeasurements} className="mt-1 min-h-11 font-display text-[1.65rem] tabular-nums underline decoration-line underline-offset-4 sm:text-3xl">{props.weightKg} kg</button>
           <p className="text-[11px] text-faint">From {props.weightSource === "today" ? "today’s weigh-in" : props.weightSource === "yesterday" ? "yesterday’s weigh-in" : "your saved baseline"}</p>
         </div>
-        <Metric label="30-day consistency" value={`${props.consistency}%`} meta="Days reaching 90%+" className="border-t border-line pr-3 sm:pr-6 xl:border-l xl:pl-6" />
+        <Metric label="30-day consistency" value={`${props.consistency}%`} meta="Days reaching 95%+" className="border-t border-line pr-3 sm:pr-6 xl:border-l xl:pl-6" />
         <Metric label="Journey" value={`${props.dayNumber} / 365`} meta={`${365 - props.dayNumber} days remain`} className="border-l border-t border-line pl-4 sm:pl-6 xl:border-t-0" />
       </section>
 
@@ -427,7 +429,7 @@ function ProteinLogView(props: ProteinLogProps) {
                 <p className="font-display text-[3.25rem] leading-none tabular-nums sm:text-[4.5rem]">{formatGrams(props.consumed)}<span className="ml-2 text-xl text-muted sm:text-2xl">g</span></p>
                 <p className="mt-2 text-sm text-muted">{formatGrams(props.remaining)} g remaining of your {props.goal} g target</p>
               </div>
-              {meetsProteinSuccess(props.consumed, props.goal) ? <span className="flex min-h-11 items-center gap-2 text-sm font-bold text-success"><Check size={17} /> Day marked successful · 90%+</span> : <div className="text-left text-xs text-muted sm:text-right"><p>0.7 g protein × {formatGrams(kilogramsToPounds(props.weightKg))} lb</p><p className="mt-1 text-faint">Converted from {formatGrams(props.weightKg)} kg · using {props.weightSource === "today" ? "today’s" : props.weightSource === "yesterday" ? "yesterday’s" : "baseline"} weight</p></div>}
+              {meetsProteinSuccess(props.consumed, props.goal) ? <span className="flex min-h-11 items-center gap-2 text-sm font-bold text-success"><Check size={17} /> Day marked successful · 95%+</span> : <div className="text-left text-xs text-muted sm:text-right"><p>0.7 g protein × {formatGrams(kilogramsToPounds(props.weightKg))} lb</p><p className="mt-1 text-faint">Converted from {formatGrams(props.weightKg)} kg · using {props.weightSource === "today" ? "today’s" : props.weightSource === "yesterday" ? "yesterday’s" : "baseline"} weight</p></div>}
             </div>
             <div className="mt-7 h-3 bg-canvas" role="progressbar" aria-label="Daily protein progress" aria-valuenow={Math.round(props.percent)} aria-valuemin={0} aria-valuemax={100}>
               <div className="h-full bg-gold transition-[width] duration-500" style={{ width: `${props.percent}%` }} />
@@ -1014,7 +1016,7 @@ function ProgressCalendar({ today, goal, startDate, onOpenDay }: { today: string
       </section>
 
       {view !== "day" && <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted" aria-label="Calendar legend">
-        {[['P', 'Protein · 90%+'], ['W', 'Workout'], ['C', 'Creatine'], ['M', 'Measurement']].map(([symbol, label]) => <span key={symbol} className="flex items-center gap-2"><span className="grid size-5 place-items-center bg-gold text-[8px] font-bold text-ink">{symbol}</span>{label}</span>)}
+        {[['P', 'Protein · 95%+'], ['W', 'Workout'], ['C', 'Creatine'], ['M', 'Measurement']].map(([symbol, label]) => <span key={symbol} className="flex items-center gap-2"><span className="grid size-5 place-items-center bg-gold text-[8px] font-bold text-ink">{symbol}</span>{label}</span>)}
         <span className="flex items-center gap-2"><span className="grid size-5 place-items-center bg-gold-soft text-[8px] font-bold text-gold-dark">P</span>Protein in progress</span>
       </div>}
     </div>

@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 
 const starterExercises = [
   { category: "Arms", name: "Biceps curls", tracking: "strength" as const },
+  { category: "Arms", name: "Barbell Curl", tracking: "strength" as const },
   { category: "Arms", name: "Overhead tricep dumbbell", tracking: "strength" as const },
   { category: "Arms", name: "Cable tricep pushdown", tracking: "strength" as const },
   { category: "Back", name: "Dumbbell row", tracking: "strength" as const },

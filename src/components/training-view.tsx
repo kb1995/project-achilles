@@ -57,11 +57,17 @@ const nextKey = () => ++draftKey;
 
 const exerciseImages: Record<string, string> = {
   "Biceps curls": "/exercises/biceps-curls.webp",
+  "Barbell Curl": "/exercises/barbell-curl.webp",
+  "Barbell Overhead Press": "/exercises/barbell-overhead-press.webp",
+  "Barbel overhead press": "/exercises/barbell-overhead-press.webp",
   "Overhead tricep dumbbell": "/exercises/overhead-tricep-dumbbell.webp",
   "Cable tricep pushdown": "/exercises/cable-tricep-pushdown.webp",
   "Dumbbell row": "/exercises/dumbbell-row.webp",
   "Lat pulldown": "/exercises/lat-pulldown.webp",
   "Dumbbell press": "/exercises/dumbbell-press.webp",
+  "Bench press": "/exercises/bench-press.webp",
+  "Decline Chest Press Machine": "/exercises/decline-chest-press-machine.webp",
+  "Decline chest press": "/exercises/decline-chest-press-machine.webp",
   "Incline press": "/exercises/incline-press.webp",
   "Bulgarian split squat": "/exercises/bulgarian-split-squat.webp",
   "Squats": "/exercises/squats.webp",
