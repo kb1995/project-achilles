@@ -24,6 +24,7 @@ import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { AchillesMark } from "./achilles-mark";
 import { TrainingView } from "./training-view";
+import { longestStreakWithWeeklyRest } from "@/lib/streak";
 
 type AppView = "overview" | "protein" | "training" | "measurements";
 type CalendarView = "day" | "week" | "month" | "year";
@@ -976,12 +977,9 @@ function ProgressCalendar({ today, goal, startDate, onOpenDay }: { today: string
   const scores = eligibleDates.map((date) => completedSignals(daysByDate.get(date) ?? emptyCalendarDay(date), goal));
   const completed = scores.filter((score) => score === 4).length;
   const completion = Math.round((scores.reduce((sum, score) => sum + score, 0) / Math.max(1, scores.length * 4)) * 100);
-  let longestStreak = 0;
-  let runningStreak = 0;
-  for (const score of scores) {
-    runningStreak = score === 4 ? runningStreak + 1 : 0;
-    longestStreak = Math.max(longestStreak, runningStreak);
-  }
+  const longestStreak = longestStreakWithWeeklyRest(
+    eligibleDates.map((date, index) => ({ date, complete: scores[index] === 4 })),
+  );
 
   const title = view === "day"
     ? formatDayHeading(range.start, today)
@@ -1003,7 +1001,7 @@ function ProgressCalendar({ today, goal, startDate, onOpenDay }: { today: string
       {view !== "day" && <section aria-label="Period summary" className="grid border-b border-line sm:grid-cols-3">
         <Metric label="Complete days" value={`${completed} / ${eligibleDates.length}`} meta="All four signals complete" />
         <Metric label="Overall progress" value={`${completion}%`} meta="Across all daily signals" bordered />
-        <Metric label="Best streak" value={`${longestStreak} ${longestStreak === 1 ? "day" : "days"}`} meta="Consecutive complete days" bordered />
+        <Metric label="Best streak" value={`${longestStreak} ${longestStreak === 1 ? "day" : "days"}`} meta="One rest day per week allowed" bordered />
       </section>}
 
       <section className="mt-7 border border-line bg-paper paper-shadow">
