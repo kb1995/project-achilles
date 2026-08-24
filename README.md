@@ -1,6 +1,6 @@
 # Achilles
 
-A personal 12-month progress journal beginning August 10, 2026, with daily protein and weight tracking. The protein target converts body weight from kilograms to pounds, then calculates `body weight (lb) × 0.7`, using today’s recorded weight when available and yesterday’s otherwise.
+A personal 12-month progress journal beginning August 10, 2026, with daily protein and weight tracking. Protein goals are calculated directly from body weight in kilograms: minimum at `1.55 g/kg`, target at `1.79 g/kg`, and stretch at `2.0 g/kg`, rounded to the nearest gram. Today’s recorded weight is used when available and yesterday’s otherwise; reaching the minimum marks the protein signal complete.
 
 ## Stack
 

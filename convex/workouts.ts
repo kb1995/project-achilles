@@ -10,6 +10,7 @@ const starterExercises = [
   { category: "Back", name: "Lat pulldown", tracking: "strength" as const },
   { category: "Chest", name: "Dumbbell press", tracking: "strength" as const },
   { category: "Chest", name: "Bench press", tracking: "strength" as const },
+  { category: "Chest", name: "Chest Fly Machine", tracking: "strength" as const },
   { category: "Chest", name: "Decline Chest Press Machine", tracking: "strength" as const },
   { category: "Chest", name: "Incline press", tracking: "strength" as const },
   { category: "Legs", name: "Bulgarian split squat", tracking: "strength" as const },

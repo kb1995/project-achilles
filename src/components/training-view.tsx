@@ -66,6 +66,7 @@ const exerciseImages: Record<string, string> = {
   "Lat pulldown": "/exercises/lat-pulldown.webp",
   "Dumbbell press": "/exercises/dumbbell-press.webp",
   "Bench press": "/exercises/bench-press.webp",
+  "Chest Fly Machine": "/exercises/chest-fly-machine.webp",
   "Decline Chest Press Machine": "/exercises/decline-chest-press-machine.webp",
   "Decline chest press": "/exercises/decline-chest-press-machine.webp",
   "Incline press": "/exercises/incline-press.webp",
